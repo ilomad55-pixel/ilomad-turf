@@ -1,0 +1,388 @@
+1. Synthèse
+Ce document analyse le projet de pronostic des courses hippiques porté par ILOMAD IT-Solution : formalisation mathématique, facteurs d’influence, disponibilité et conditions d’accès aux données, comparaison avec les pronostiqueurs professionnels, difficultés, compléments et plan de réalisation d’une application personnelle extensible en SaaS.
+Les 6 messages clés
+1. Le formalisme est bon, mais il faut changer d’objet. Plutôt que la fonction F seule, il faut modéliser une loi de probabilité sur l’ensemble des ordres d’arrivée possibles. Tout « résultat partiel » (gagnant, Top(3), Quinté désordre…) devient alors un événement dont on calcule la probabilité par simple sommation.
+2. Les données existent, mais rarement « libres ». Le programme, les partants, la musique, les cotes et les rapports sont accessibles (PMU, LeTrot, France Galop, presse). L’historique profond et propre est en grande partie payant, et l’usage commercial (SaaS) exige une licence.
+3. Le concurrent principal n’est pas le journaliste, c’est la cote. La cote PMU agrège l’information de milliers de parieurs; c’est le meilleur prédicteur unique. Un modèle n’a de valeur que s’il apporte une information en plus de la cote.
+4. Le prélèvement est un obstacle structurel. Le PMU reverse en moyenne environ 75 % des mises, et moins sur les paris combinés comme le Quinté+. Prédire « mieux que le hasard » ne suffit pas: il faut battre le marché de plus que le prélèvement.
+5. Commencer petit : une discipline (le trot attelé est le plus riche en France), un type de pari (Gagnant/Placé, puis Quinté), un historique de 3 à 5 ans, une validation strictement chronologique.
+6. L’architecture doit être pensée SaaS dès le départ (collecte horodatée, modèle versionné, API séparée de l’interface), mais la mise en SaaS ne se justifie qu’après une preuve de performance mesurée sur données « futures ».
+2. Formalisation mathématique: analyse critique et enrichissement
+2.1 Ce qui est juste dans votre formalisme
+Modéliser une course comme une fonction F : H ? R = {0, 1, …, n} est pertinent : le résultat global (l’arrivée complète) détermine tous les résultats partiels, et un résultat partiel ne permet pas de reconstituer le résultat global. C’est exactement la relation entre un élément d’un espace de résultats et un événement (un sous-ensemble de cet espace).
+2.2 Points à corriger ou préciser
+• Coquille dans l’exemple : H = {h1, h2, h3, h4, h8, h6, h7, h8} contient deux fois h8 et pas h5 ; il faut lire {h1, …, h8}.
+• Injectivité : F restreinte aux chevaux classés doit être injective (deux chevaux ne peuvent pas avoir le même rang)… sauf en cas d’ex æquo (« dead-heat »), qui existe réellement et que les règlements PMU traitent spécifiquement. Il faut donc autoriser F(hp) = F(hq) dans ce cas.
+• Le 0 regroupe des situations différentes : non-partant (retiré avant le départ, mises remboursées ou reportées), disqualifié (très fréquent au trot pour allure irrégulière), arrêté, tombé (obstacle), distancé. Statistiquement ces cas n’ont pas la même signification : il faut un code de statut distinct de la place.
+• Classement partiel : l’arrivée officielle ne donne souvent que les premières places (par exemple les 7 premiers au trot) ; au-delà, les chevaux sont « non classés ». Le modèle doit gérer une information incomplète.
+• Top(k) : votre définition 0 < F(hp) ? k est correcte et suffit pour formaliser Placé (k = 2 ou 3), Tiercé, Quarté, Quinté.
+2.3 Le bon objet : une loi de probabilité sur les ordres d’arrivée
+Soit ? l’ensemble des ordres d’arrivée possibles (les permutations des partants, complétées par les statuts). Une course réelle produit un seul ? ? ? ; un pronostic est une loi de probabilité P sur ?. Chaque question devient un calcul :
+• P(h2 gagne) = somme des P(?) pour lesquels h2 est premier ;
+• P(h2 et h4 ? Top(3)) = somme des P(?) pour lesquels h2 et h4 sont dans les trois premiers ;
+• P(Quinté désordre {a,b,c,d,e}) = somme sur les 120 ordres de ces cinq chevaux en tête.
+L’explosion combinatoire est réelle : pour 16 partants, il existe 16 × 15 × 14 × 13 × 12 = 524 160 quintés ordonnés et C(16,5) = 4 368 combinaisons en désordre. On ne stocke donc pas P(?) pour tout ? : on la paramètre avec une « force » par cheval.
+Modèle de Plackett-Luce (ou formule de Harville)
+À chaque cheval i on associe une force s_i > 0 (ou une probabilité de victoire p_i = s_i / ? s_j). La probabilité d’un ordre d’arrivée (i1, i2, i3, …) est :
+P(i1, i2, i3, ...) = p_i1 × p_i2 / (1 ? p_i1) × p_i3 / (1 ? p_i1 ? p_i2) × ...
+
+Le gagnant est tiré selon les p_i, puis le deuxième parmi les restants, etc. Avantages : un seul paramètre par cheval, calcul exact de toute probabilité de Top(k), simulation Monte-Carlo très rapide (100 000 courses simulées en une fraction de seconde).
+Limite connue à corriger
+La formule de Harville surestime les chances des favoris pour les 2e et 3e places et sous-estime celles des outsiders. Les corrections classiques (modèles de Henery et de Stern, ou une « puissance d’atténuation » p_i^? avec ? < 1 estimé sur les données pour les rangs 2, 3, …) sont simples à intégrer et à calibrer sur l’historique.
+2.4 Du modèle de force aux paris
+Une fois la loi P définie, la valeur d’un pari se calcule par l’espérance de gain: E = P(gagner le pari) × rapport ? mise. Un pari n’a d’intérêt que si E > 0, ce qui suppose que votre probabilité est meilleure que celle implicite dans le rapport PMU. C’est le pont entre la théorie et la comparaison avec les systèmes de paris (§ 5).
+3. Question 1 — Influence des paramètres sur la performance
+Avertissement méthodologique: les effets ci-dessous sont des hypothèses ordonnées par importance attendue, issues de la pratique du handicap et de la littérature sur les modèles de courses. Leur poids réel doit être mesuré sur vos propres données, par discipline, car il varie fortement entre trot, plat et obstacle.
+3.1 Tableau des facteurs
+Domaine
+Facteur
+Influence attendue
+Commentaire critique
+Marché
+Cote PMU (probabilité implicite)
+Très forte
+Synthèse de toute l’information publique. Toujours l’inclure, mais horodatée (cote au moment du pronostic, pas la cote finale).
+Cheval
+Forme récente (musique, 3 à 6 dernières courses)
+Très forte
+À pondérer par le niveau des courses disputées ; une 3e place en Groupe vaut mieux qu’une victoire en course modeste.
+Cheval
+Niveau : gains, valeur handicap (galop), réduction kilométrique (trot)
+Forte
+Normaliser par hippodrome, distance et état de piste. La réduction kilométrique est un atout majeur du trot.
+Cheval
+Aptitude distance / hippodrome / terrain / corde
+Forte
+Effet d’interaction : à mesurer comme « performance sur conditions similaires ».
+Cheval
+Délai depuis la dernière course
+Moyenne
+Relation non linéaire (trop court ou trop long pénalise).
+Cheval
+Équipement : déferrage (trot), œillères
+Moyenne à forte (trot)
+Le premier déferrage est souvent un signal d’intention de l’entourage. Information connue tardivement.
+Cheval
+Âge, sexe
+Faible à moyenne
+Surtout utile chez les jeunes et en interaction avec la catégorie de course.
+Cheval
+Race
+Quasi nulle intra-course
+Dans une même course, tous sont de la même race (trotteur français, pur-sang…). C’est l’origine (père, mère) qui informe sur l’aptitude au terrain et à la distance, surtout pour les jeunes.
+Cheval
+Couleur de robe
+Aucune démontrée
+À exclure : risque de corrélations fortuites (sur-apprentissage).
+Jockey / driver
+Taux de réussite récent, réussite avec ce cheval, changement de monte
+Moyenne à forte
+Au trot, le driver pèse beaucoup. Un changement vers un « top driver » est un signal.
+Entraîneur
+Forme de l’écurie (réussite sur 30/90 jours), spécialités
+Moyenne
+Les écuries ont des cycles de forme ; utiliser des taux lissés (bayésiens) pour les petits effectifs.
+Propriétaire
+Taille de l’écurie, nombre de partants engagés
+Faible
+Plutôt une variable de contrôle.
+Course
+Discipline, distance, nombre de partants, catégorie, allocation
+Contexte
+Définit le « champ de bataille » : sert à normaliser, pas à classer directement.
+Course
+Position de départ : corde (plat), numéro / 2e ligne / recul (trot)
+Moyenne à forte
+Effets très dépendants de l’hippodrome et de la distance.
+Course
+Poids porté (handicaps de plat)
+Moyenne
+Le handicapeur cherche justement à égaliser les chances.
+Environnement
+État du terrain (pénétromètre au galop), météo
+Moyenne, via l’aptitude
+Peu d’effet direct ; effet fort par interaction avec l’aptitude du cheval.
+3.2 Trois remarques critiques
+1. Les effets ne sont pas additifs. L’état du terrain n’a d’effet qu’à travers l’aptitude du cheval ; une distance n’a d’effet qu’au regard de l’historique du cheval sur cette distance. Il faut des variables d’interaction ou des modèles qui les capturent (arbres de décision boostés).
+2. La performance est relative. Ce qui compte n’est pas la valeur absolue d’un cheval mais sa valeur par rapport aux autres partants. Il faut donc travailler en écart à la moyenne de la course, ou utiliser un modèle de choix (logit conditionnel) qui compare les chevaux entre eux.
+3. Ce qui compte, c’est l’apport marginal. Un facteur très prédictif mais déjà « dans la cote » n’apporte rien pour parier. William Benter, auteur du système le plus documenté (Hong Kong), a montré que la combinaison de son modèle fondamental avec les probabilités du public était nettement supérieure à chacun pris isolément.
+4. Question 2 — Les données sont-elles disponibles, et à quelles conditions ?
+Réponse courte : oui pour l’essentiel, mais l’accès gratuit, complet, historique et réutilisable commercialement n’existe pas en un seul point. Il faut combiner plusieurs sources et distinguer clairement l’usage personnel de l’usage commercial.
+4.1 Cartographie des sources
+Source
+Contenu
+Accès / conditions
+Usage recommandé
+PMU — services « turfinfo » (JSON utilisé par le site et les applis)
+Programme, partants, musique, jockey/driver, entraîneur, cotes (rapports probables), arrivées, rapports définitifs
+Points d’accès non documentés et sans licence publique (ex. online.turfinfo.api.pmu.fr/rest/client/7/programme/JJMMAAAA). Peuvent changer sans préavis. Les flux temps réel officiels sont payants.
+Collecte quotidienne en usage personnel, à faible fréquence, avec cache. Pour un SaaS : licence nécessaire.
+LeTrot.com (SETF) — trot
+Fiches chevaux, résultats, statistiques, courses à réclamer, bilans annuels
+Consultation libre ; extraction systématique soumise aux CGU et au droit des bases de données.
+Enrichissement (réductions kilométriques, carrières), contrôle qualité.
+France Galop — plat et obstacle
+Résultats, bulletins officiels, valeurs handicap, statistiques d’activité
+Idem : consultation libre, réutilisation encadrée.
+Valeurs handicap, enrichissement galop.
+IFCE — fichier SIRE des équidés (data.gouv.fr)
+Race, sexe, robe, date et pays de naissance, nom (? 4 millions de lignes depuis 1976)
+Open data, mise à jour annuelle.
+Référentiel chevaux et dédoublonnage (homonymes).
+Météo-France (open data) / Open-Meteo (historique)
+Températures, précipitations, vent par station et par date
+Gratuit, licences ouvertes.
+Variables d’environnement historiques par hippodrome.
+Presse et sites spécialisés (Paris-Turf, Geny, Equidia, Turfomania, Zone-Turf, Week-End…)
+Bases historiques riches, pronostics, synthèses de presse, commentaires
+Majoritairement sur abonnement; CGU interdisant généralement l’extraction automatisée.
+Comparaison des pronostics; éventuel partenariat ou achat de données.
+Jeux de données revendus (ex. « base PMU 2004–2025 » vendue environ 180 $)
+Historiques d’arrivées, parfois enrichis
+Payants, origine et droits souvent incertains, contenu parfois limité aux numéros d’arrivée.
+À évaluer sur échantillon ; à éviter pour un SaaS sans garantie de droits.
+4.2 Profondeur et qualité de l’historique
+• Pour un modèle robuste, viser 3 à 5 ans de courses complètes (toutes les courses de la discipline, pas seulement les Quintés) : environ 11 000 courses de trot par an sont organisées en France (bilans SETF), soit plusieurs centaines de milliers de lignes « partant ».
+• Les cotes historiques horodatées (cote à H-30 min, H-5 min, finale) sont la donnée la plus rare et la plus précieuse : il faut commencer à les collecter dès maintenant, car on ne peut pas les reconstituer après coup.
+• Les informations « de dernière minute » (non-partants, déferrage, changement de driver) doivent être capturées avec leur heure de publication.
+4.3 Conditions juridiques — points de vigilance
+Je ne suis pas juriste : les éléments ci-dessous sont un repérage à faire valider par un avocat avant toute exploitation commerciale.
+• Droit « sui generis » des producteurs de bases de données (art. L341-1 et L342-1 du Code de la propriété intellectuelle) : il interdit l’extraction ou la réutilisation d’une partie substantielle d’une base dont la constitution a nécessité un investissement substantiel.
+• Jurisprudence directement liée aux courses: dans l’arrêt BHB c/ William Hill (CJUE, 9 novembre 2004, C-203/02), la Cour a jugé que l’investissement consacré à la création des données (listes de partants, programmes) ne compte pas pour la protection, seul l’investissement d’obtention et de vérification compte. La Cour de cassation a repris ce raisonnement (1re civ., 5 mars 2009, n° 07-19.734). Cela ne rend pas pour autant libre la copie massive d’une base enrichie (statistiques, historiques), et les CGU des sites restent opposables.
+• Usage personnel vs SaaS : une collecte modérée pour un usage privé présente un risque faible ; la redistribution des données ou de pronostics fondés sur elles dans un service payant nécessite une base juridique claire (licence, partenariat, données ouvertes).
+• RGPD : noms de jockeys, entraîneurs et propriétaires sont des données personnelles, même publiques. Pour un SaaS : registre de traitement, base légale (intérêt légitime), hébergement UE.
+• Encadrement des jeux d’argent: publier des pronostics n’est pas une activité d’opérateur, mais toute communication incitant au pari ou toute affiliation avec un opérateur agréé est encadrée (Autorité nationale des jeux, messages de prévention obligatoires, interdiction aux mineurs).
+5. Question 3 — Comparaison avec les analyses des professionnels
+5.1 Les références existantes
+Référence
+Nature
+Ce qu’on peut en tirer
+Cotes PMU (rapports probables puis définitifs)
+Probabilités implicites issues des mises de tous les parieurs
+Le meilleur benchmark: convertir la cote en probabilité, retirer le prélèvement et normaliser à 1.
+Presse spécialisée (Paris-Turf, Week-End, Geny…)
+Pronostics d’experts, classement de 5 à 8 chevaux
+Un « classement » à évaluer comme un modèle ; souvent très corrélé à la cote.
+Synthèses de presse (Turfomania, Zone-Turf…)
+Agrégation de plusieurs pronostiqueurs
+Effet « sagesse des foules » : généralement meilleur qu’un pronostiqueur isolé.
+Applications PMU / Equidia
+Statistiques, historique, replays
+Source d’informations, pas de pronostic évaluable.
+5.2 Comment comparer honnêtement
+Chaque source est traitée comme un « modèle » et évaluée sur les mêmes courses, avant la course, avec des métriques identiques:
+Métrique
+Ce qu’elle mesure
+Pourquoi
+Log-loss (vraisemblance) sur le gagnant
+Qualité des probabilités annoncées
+Pénalise les certitudes fausses ; métrique de référence de Benter.
+Brier score / courbe de calibration
+Un « 20 % » se réalise-t-il 20 % du temps ?
+Indispensable pour calculer des espérances de gain.
+% gagnant dans le Top 1 / Top 3 du pronostic
+Lisibilité grand public
+Facile à communiquer, mais insuffisant seul.
+NDCG@5, % Quinté désordre / Bonus 4
+Qualité du classement des 5 premiers
+Adapté aux paris combinés.
+ROI simulé à mise fixe
+Rentabilité théorique après prélèvement
+Le seul juge final pour un usage pari.
+5.3 La barrière du prélèvement
+Le PMU fonctionne en pari mutuel : il prélève une part des mises puis redistribue le reste aux gagnants. Le taux de retour global aux joueurs (TRJ) tourne autour de 75 % ; il est plus faible sur les paris combinés (des sources spécialisées indiquent un TRJ d’environ 65 % pour le Quinté+ en 2025). Conséquences :
+• Jouer au hasard fait perdre en moyenne 25 à 35 % des mises selon le pari.
+• Un modèle « aussi bon que le marché » perd exactement le prélèvement.
+• Les paris simples (Gagnant, Placé) ont le prélèvement le plus faible et la meilleure liquidité : c’est là qu’un avantage est le plus facile à mesurer. Le Quinté est intéressant pour la lisibilité mais très difficile à battre.
+Avis critique
+L’objectif réaliste d’une première version n’est pas de « gagner au Quinté », mais de produire des probabilités mieux calibrées que la cote sur un sous-ensemble de courses. Si cette preuve n’est pas apportée sur données futures, le projet reste un excellent outil d’analyse et de data science, et c’est ainsi qu’il faut le présenter en SaaS.
+6. Principales difficultés et contournements
+#
+Difficulté
+Impact
+Contournement
+1
+Accès aux données : sources non documentées, CGU restrictives, historique payant
+Bloquant pour le SaaS
+Commencer en usage personnel ; collecte quotidienne à faible fréquence avec cache ; acheter ou licencier l’historique ; open data (IFCE, météo) ; contact PMU/SETF/France Galop pour une licence au moment du SaaS.
+2
+Fuite d’information (« data leakage ») : utiliser sans le savoir une donnée connue après la course (cote finale, musique mise à jour)
+Résultats faussement excellents
+Stocker chaque donnée avec son horodatage de collecte ; construire les variables « telles qu’elles étaient connues » à H-x minutes.
+3
+Identité des entités : homonymes, orthographes variables des jockeys et entraîneurs, chevaux étrangers
+Statistiques fausses
+Identifiants stables (SIRE, identifiants PMU), table de correspondance, règles de rapprochement nom + date de naissance + origine.
+4
+Peu de données pour le Quinté (environ un par jour)
+Sur-apprentissage
+Entraîner sur toutes les courses de la discipline, puis appliquer au Quinté.
+5
+Petits effectifs (jockey débutant, cheval à 2 courses)
+Taux instables
+Lissage bayésien (moyenne a priori), notations type Elo / TrueSkill.
+6
+Variables cachées : santé, intentions d’écurie, forme du jour
+Plafond de précision
+Les capter indirectement : mouvements de cote, déferrage, changements de monte, engagements.
+7
+Non-stationnarité : les modes de jeu, les pistes, les règles évoluent
+Dégradation du modèle
+Validation glissante (walk-forward), ré-entraînement régulier, suivi de la dérive.
+8
+Explosion combinatoire des paris combinés
+Calculs lourds
+Modèle de Plackett-Luce + simulation Monte-Carlo ; calcul exact pour Top(3).
+9
+Évaluation trompeuse : tests multiples, choix a posteriori
+Illusion de rentabilité
+Jeu de test « gelé », journal de pronostics horodaté publié avant la course, comparaison systématique à la cote.
+10
+Marché efficace + prélèvement
+Rentabilité incertaine
+Viser la calibration, les paris simples, le combiné modèle + marché (approche Benter) ; mises fractionnées (Kelly fractionnel) en simulation d’abord.
+11
+Risque de jeu excessif (utilisateur et soi-même)
+Humain et réputationnel
+Limites de mise, simulations fictives, messages de prévention, refus d’accès aux mineurs.
+12
+Industrialisation SaaS (charge, sécurité, conformité)
+Coût et délais
+Architecture modulaire dès le départ, hébergement UE, RGPD, CGU et mentions légales rédigées par un professionnel.
+7. Compléments pour enrichir le projet
+7.1 Une progression de modèles, du plus simple au plus fin
+1. Modèle 0 - Le marché : probabilités implicites des cotes, normalisées. C’est la référence à battre.
+2. Modèle 1 - Logit conditionnel (Bolton & Chapman, Benter) : score linéaire des facteurs, probabilité de victoire = softmax des scores dans la course. Interprétable, robuste, peu de données nécessaires.
+3. Modèle 2 - Gradient boosting avec objectif de classement (LightGBM/XGBoost « LambdaRank ») : capte les interactions (terrain × aptitude, distance × historique).
+4. Modèle 3 - Combinaison avec le marché (« deuxième étape » de Benter) : logit combinant log(p_modèle) et log(p_marché). Le coefficient obtenu mesure ce que votre modèle apporte réellement.
+5. Étape finale - Calibration (régression isotonique) puis Plackett-Luce pour toutes les probabilités de Top(k) et des paris combinés.
+7.2 Variables construites (« feature engineering ») à forte valeur
+• Notations dynamiques de type Elo/TrueSkill pour chevaux, drivers/jockeys et entraîneurs, mises à jour après chaque course.
+• Vitesse normalisée: réduction kilométrique corrigée par hippodrome, distance et état de piste (trot); valeur handicap (galop).
+• Variables de changement : nouveau driver, premier déferrage, montée/descente de catégorie, changement de distance ou d’hippodrome.
+• Variables relatives à la course : écart à la moyenne des partants, rang dans la course pour chaque variable.
+• Dynamique de la cote : variation entre la cote d’ouverture et la cote à H-5 min (« l’argent intelligent »).
+7.3 Gestion de mise et décision
+• Espérance de gain : E = p × rapport ? 1. Ne retenir que les paris où E dépasse un seuil de sécurité.
+• Critère de Kelly fractionnel (par exemple 1/4 de Kelly) pour dimensionner les mises fictives, avec un plafond par course.
+• Attention : pour le pari mutuel, votre propre mise fait baisser le rapport ; négligeable en usage personnel, à prendre en compte à grande échelle.
+7.4 Bonnes pratiques qui feront la crédibilité du SaaS
+• Journal de pronostics horodaté et immuable, publié avant chaque course : la meilleure preuve de performance possible.
+• Explicabilité (valeurs SHAP) : « pourquoi ce cheval est classé 2e ». Très apprécié des turfistes.
+• Tableau de bord de performance public : calibration, ROI simulé, comparaison au marché et à la presse.
+• Versionnement des données et des modèles (chaque pronostic référence la version du modèle qui l’a produit).
+8. Plan de réalisation : application personnelle extensible en SaaS
+8.1 Architecture cible
+Couche
+Rôle
+Choix proposé (personnel)
+Évolution SaaS
+Collecte
+Programmes, partants, cotes horodatées, arrivées, rapports, météo
+Python (httpx), tâches planifiées (cron ou Prefect), stockage brut JSON
+Files de messages, collecte temps réel, sources licenciées
+Stockage
+Données brutes + modèle relationnel propre
+PostgreSQL (ou SQLite pour démarrer) + fichiers bruts
+PostgreSQL managé (UE), sauvegardes, entrepôt analytique (DuckDB / ClickHouse)
+Préparation
+Nettoyage, rapprochement des entités, variables « point-in-time »
+pandas / Polars, dbt optionnel
+Pipelines versionnés, tests de qualité de données
+Modélisation
+Entraînement, calibration, Plackett-Luce, simulation
+scikit-learn, LightGBM, statsmodels ; MLflow pour le suivi
+Ré-entraînement automatique, registre de modèles, surveillance de dérive
+Service
+API de pronostics et de statistiques
+FastAPI
+Authentification, quotas, multi-locataires, facturation (Stripe)
+Interface
+Programme du jour, probabilités, comparatifs, performance
+Streamlit (rapide à développer)
+Application web React / Next.js, mobile ultérieurement
+Exploitation
+Déploiement, supervision
+Docker Compose sur un poste ou un petit serveur
+Hébergement UE, CI/CD, supervision, journaux, RGPD
+8.2 Modèle de données (tables principales)
+Table
+Contenu principal
+hippodrome
+Code, nom, pays, type de piste, sens, longueur, coordonnées GPS (pour la météo)
+reunion / course
+Date, hippodrome, numéro, discipline, distance, catégorie, allocation, nombre de partants, état du terrain, conditions
+cheval
+Identifiant stable (SIRE/PMU), nom, sexe, date de naissance, race, père, mère, éleveur
+personne + role
+Jockey/driver, entraîneur, propriétaire (une personne peut avoir plusieurs rôles)
+partant
+Course × cheval : numéro, corde/position, poids, ferrure, œillères, driver, entraîneur, musique à la date de la course, statut (partant, non-partant)
+resultat
+Partant : place, statut (classé, disqualifié, arrêté, tombé, ex æquo), temps, réduction kilométrique, écarts
+cote_snapshot
+Partant × horodatage : cote, type (probable, finale), source
+rapport
+Course × type de pari : combinaison gagnante, rapport, masse des enjeux
+meteo
+Hippodrome × date/heure : température, pluie, vent
+modele_version / prediction
+Version, date d’entraînement, métriques ; probabilité par partant et par course, horodatée avant le départ
+evaluation
+Course × modèle : log-loss, rang du gagnant, résultat des paris simulés
+8.3 Feuille de route par phases
+Phase
+Durée indicative
+Contenu
+Livrable / critère de sortie
+0. Cadrage
+1 à 2 semaines
+Choix de la discipline (recommandé : trot attelé) et du pari pilote ; inventaire des sources ; schéma de base ; règles d’horodatage
+Cahier des charges court, schéma SQL validé
+1. Collecte et base
+3 à 4 semaines
+Collecteurs quotidiens (programme, partants, cotes à plusieurs horaires, arrivées, rapports) ; reprise d’historique ; référentiel chevaux/personnes
+Base alimentée automatiquement chaque jour ; contrôles de qualité
+2. Exploration et référence
+2 à 3 semaines
+Statistiques descriptives par facteur ; modèle 0 (marché) ; métriques d’évaluation
+Rapport d’analyse ; valeurs de référence log-loss / calibration du marché
+3. Modèle v1
+3 à 4 semaines
+Variables point-in-time ; logit conditionnel puis boosting ; calibration ; validation glissante
+Modèle meilleur que le marché seul en combinaison (ou conclusion documentée)
+4. Probabilités des paris
+2 semaines
+Plackett-Luce corrigé ; Monte-Carlo ; probabilités Top(k), Tiercé, Quarté, Quinté ; espérance de gain par combinaison
+Module de calcul testé ; comparaison aux rapports réels
+5. Application personnelle
+2 à 3 semaines
+Interface Streamlit : programme, probabilités, explications, comparatif presse/cote, journal de pronostics
+Application utilisable au quotidien
+6. Boucle d’amélioration
+Continu (3 à 6 mois)
+Pronostics horodatés en conditions réelles ; ré-entraînement mensuel ; ajout de variables ; extension aux autres disciplines
+Historique de performance sur données futures
+7. Passage en SaaS
+3 à 6 mois
+Licence de données ; API sécurisée ; comptes et abonnements ; site web ; conformité (CGU, RGPD, prévention du jeu excessif) ; hébergement UE
+Version bêta fermée, puis ouverture commerciale
+8.4 Critères de décision (« go/no-go »)
+• Fin de phase 3: si le modèle combiné n’améliore pas la log-loss du marché sur la période de test, ne pas engager d’argent réel; poursuivre l’amélioration ou repositionner le produit en outil d’analyse.
+• Avant la phase 7: au moins 6 mois de pronostics horodatés publiés, une source de données juridiquement exploitable et une estimation des coûts (données, hébergement) cohérente avec un prix d’abonnement.
+8.5 Offre SaaS envisageable
+Formule
+Contenu
+Cible
+Découverte (gratuite)
+Probabilités du Quinté du jour, historique de performance public
+Acquisition
+Turfiste
+Toutes les courses d’une discipline, explications, comparatifs presse/cote, alertes
+Parieurs réguliers
+Expert / API
+Accès API aux probabilités et statistiques, export, simulation de stratégies
+Développeurs, analystes, médias
+9. Conclusion et prochaine étape
+Le projet est techniquement réalisable et intellectuellement solide : le cadre probabiliste (loi sur les ordres d’arrivée, Plackett-Luce, Monte-Carlo) répond exactement à votre intuition de « résultat global » et de « résultats partiels ». Les deux vrais défis ne sont pas mathématiques : ce sont l’accès à des données horodatées et réutilisables et l’efficacité du marché des paris combinée au prélèvement du PMU.
+Prochaine étape recommandée: lancer immédiatement la collecte quotidienne horodatée (programme, partants, cotes à plusieurs horaires, arrivées et rapports) pour le trot attelé. Chaque jour de collecte est une donnée qui ne pourra jamais être rattrapée, et cette base sera l’actif principal du futur SaaS.

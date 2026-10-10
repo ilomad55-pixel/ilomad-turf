@@ -1,0 +1,2 @@
+# Les scripts shell tournent sur le VPS (Linux) : fins de ligne LF, même édités sous Windows.
+*.sh text eol=lf

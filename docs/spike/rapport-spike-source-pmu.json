@@ -1,0 +1,767 @@
+{
+  "genere_le": "2026-10-10T21:10:05+00:00",
+  "url_base": "https://online.turfinfo.api.pmu.fr/rest/client/7",
+  "dates_echantillon": [
+    "2021-01-10",
+    "2021-01-24",
+    "2021-10-16",
+    "2021-10-30",
+    "2022-03-05",
+    "2022-03-19",
+    "2023-01-15",
+    "2023-01-29",
+    "2023-06-16",
+    "2023-06-30",
+    "2024-09-07",
+    "2024-09-21",
+    "2025-11-15",
+    "2025-11-29",
+    "2026-09-12",
+    "2026-09-26"
+  ],
+  "echantillon": {
+    "perimetre": {
+      "courses_par_annee": {
+        "2021": 47,
+        "2022": 49,
+        "2023": 94,
+        "2024": 59,
+        "2025": 46,
+        "2026": 39
+      },
+      "participants_par_annee": {
+        "2021": 639,
+        "2022": 598,
+        "2023": 1272,
+        "2024": 773,
+        "2025": 623,
+        "2026": 497
+      }
+    },
+    "point_1_musique_et_compteurs_figes": {
+      "participants_avec_musique": 4326,
+      "musiques_avec_annee_posterieure_a_la_course": 0,
+      "exemples_annee_posterieure": [],
+      "chevaux_de_1_a_6_courses": {
+        "comparables": 634,
+        "nb_courses_egal_nb_jetons_musique": 587,
+        "taux": 0.9259,
+        "exemples_differents": [
+          {
+            "date": "2021-01-10",
+            "nom": "CHIANTI (SWE)",
+            "nombreCourses": 2,
+            "musique": "206M1A3M0A7ADA"
+          },
+          {
+            "date": "2021-01-24",
+            "nom": "GALACTICA",
+            "nombreCourses": 1,
+            "musique": "0M201M5M0A1M3A"
+          },
+          {
+            "date": "2021-01-24",
+            "nom": "UNDER THE COUNTER",
+            "nombreCourses": 2,
+            "musique": "3M206A5M2M1M0A"
+          },
+          {
+            "date": "2021-01-24",
+            "nom": "ARAMIS BAR",
+            "nombreCourses": 5,
+            "musique": "8A207A0A1A1A3A"
+          },
+          {
+            "date": "2021-01-24",
+            "nom": "UPSET FACE",
+            "nombreCourses": 1,
+            "musique": "7A206ADA4A7A5A"
+          },
+          {
+            "date": "2022-03-05",
+            "nom": "BLACKFLASH BAR",
+            "nombreCourses": 1,
+            "musique": "217A1A2A5A1A4A"
+          },
+          {
+            "date": "2023-01-15",
+            "nom": "BEADS (USA)",
+            "nombreCourses": 3,
+            "musique": "0A223ADA0ADADA"
+          },
+          {
+            "date": "2023-01-15",
+            "nom": "CALGARY GAMES",
+            "nombreCourses": 1,
+            "musique": "22DA1A211A1A1A1A"
+          }
+        ]
+      },
+      "chevaux_revus_a_une_date_ulterieure": {
+        "paires_de_passages": 513,
+        "nb_courses_a_progresse": 513,
+        "nb_courses_identique": 0,
+        "gains_comparables": 419,
+        "gains_en_baisse": 0,
+        "exemples_gains_en_baisse": [],
+        "ecart_nb_courses": {
+          "n": 513,
+          "min": 1,
+          "p05": 1.0,
+          "p25": 3.0,
+          "p50": 14.0,
+          "p75": 24.0,
+          "p95": 53.4,
+          "max": 81
+        },
+        "resultat_retrouve_dans_musique_suivante": {
+          "comparables": 169,
+          "conformes": 167,
+          "taux": 0.9882
+        }
+      },
+      "premier_jeton_vs_derniere_performance_detaillee": {
+        "comparables": 484,
+        "place_conforme": 482,
+        "taux_place": 0.9959,
+        "discipline_conforme": 484
+      }
+    },
+    "point_2_cote_de_reference": {
+      "minutes_avant_depart_prevu": {
+        "n": 330,
+        "min": -0.08,
+        "p05": 22.37,
+        "p25": 29.92,
+        "p50": 29.92,
+        "p75": 31.92,
+        "p95": 35.92,
+        "max": 64.92
+      },
+      "par_annee": {
+        "2021": {
+          "n": 47,
+          "min": 6.92,
+          "p05": 29.92,
+          "p25": 29.92,
+          "p50": 29.92,
+          "p75": 31.92,
+          "p95": 34.92,
+          "max": 42.92
+        },
+        "2022": {
+          "n": 49,
+          "min": 4.92,
+          "p05": 10.92,
+          "p25": 29.92,
+          "p50": 29.92,
+          "p75": 32.92,
+          "p95": 34.92,
+          "max": 39.92
+        },
+        "2023": {
+          "n": 92,
+          "min": -0.08,
+          "p05": 19.92,
+          "p25": 29.92,
+          "p50": 29.92,
+          "p75": 31.92,
+          "p95": 34.92,
+          "max": 39.92
+        },
+        "2024": {
+          "n": 57,
+          "min": 6.9,
+          "p05": 29.92,
+          "p25": 29.92,
+          "p50": 29.92,
+          "p75": 31.92,
+          "p95": 36.12,
+          "max": 39.92
+        },
+        "2025": {
+          "n": 46,
+          "min": 4.92,
+          "p05": 26.17,
+          "p25": 29.92,
+          "p50": 29.92,
+          "p75": 30.92,
+          "p95": 33.92,
+          "max": 35.92
+        },
+        "2026": {
+          "n": 39,
+          "min": 29.92,
+          "p05": 29.92,
+          "p25": 29.92,
+          "p50": 29.92,
+          "p75": 31.92,
+          "p95": 38.42,
+          "max": 64.92
+        }
+      },
+      "courses_reference_entre_25_et_40_min": 308,
+      "courses_reference_a_moins_de_20_min": 15,
+      "courses_reference_a_moins_de_5_min": 4,
+      "courses_reference_posterieure_au_depart_prevu": 1,
+      "courses_sans_cote_de_reference": {
+        "2023": 2,
+        "2024": 2
+      },
+      "courses_ou_les_partants_n_ont_pas_le_meme_horodatage": {
+        "2023": 1
+      },
+      "cote_directe_minutes_avant_depart_prevu": {
+        "n": 334,
+        "min": -26.18,
+        "p05": -10.83,
+        "p25": -2.47,
+        "p50": -1.6,
+        "p75": -0.99,
+        "p95": -0.6,
+        "max": 0.83
+      },
+      "courses_cote_directe_posterieure_au_depart_prevu": 333,
+      "courses_sans_cote_directe": {}
+    },
+    "point_3_masses_internet_et_offline": {
+      "courses_comparees": 64,
+      "defaut_identique_a_offline": 64,
+      "combinaisons_statuts_http": {
+        "INTERNET:200": 58,
+        "INTERNET:204": 6,
+        "OFFLINE:200": 57,
+        "OFFLINE:204": 7
+      },
+      "types_pari": {
+        "OFFLINE:SIMPLE_GAGNANT": 770,
+        "INTERNET:E_SIMPLE_GAGNANT": 743,
+        "OFFLINE:None": 53,
+        "INTERNET:None": 80
+      },
+      "enjeu_simple_gagnant_offline_eur": {
+        "n": 57,
+        "min": 1689.0,
+        "p05": 52487.91,
+        "p25": 111783.5,
+        "p50": 154326.7,
+        "p75": 224762.81,
+        "p95": 285867.37,
+        "max": 1635641.38
+      },
+      "enjeu_simple_gagnant_internet_eur": {
+        "n": 58,
+        "min": 4715.3,
+        "p05": 9242.12,
+        "p25": 17482.19,
+        "p50": 23911.28,
+        "p75": 32469.15,
+        "p95": 54983.02,
+        "max": 214187.82
+      },
+      "ratio_offline_sur_internet": {
+        "n": 56,
+        "min": 2.62,
+        "p05": 2.77,
+        "p25": 5.32,
+        "p50": 6.96,
+        "p75": 8.15,
+        "p95": 9.73,
+        "max": 10.4
+      },
+      "ecart_moyen_log_cotes_reference": {
+        "n": 58,
+        "min": 0.11,
+        "p05": 0.144,
+        "p25": 0.211,
+        "p50": 0.265,
+        "p75": 0.355,
+        "p95": 0.572,
+        "max": 1.159
+      },
+      "somme_des_inverses_de_cotes": {
+        "INTERNET:directe": {
+          "n": 58,
+          "min": 1.142,
+          "p05": 1.153,
+          "p25": 1.166,
+          "p50": 1.179,
+          "p75": 1.185,
+          "p95": 1.193,
+          "max": 1.206
+        },
+        "INTERNET:reference": {
+          "n": 58,
+          "min": 1.001,
+          "p05": 1.15,
+          "p25": 1.159,
+          "p50": 1.178,
+          "p75": 1.183,
+          "p95": 1.189,
+          "max": 1.198
+        },
+        "OFFLINE:directe": {
+          "n": 64,
+          "min": 1.173,
+          "p05": 1.181,
+          "p25": 1.189,
+          "p50": 1.194,
+          "p75": 1.199,
+          "p95": 1.206,
+          "max": 1.215
+        },
+        "OFFLINE:reference": {
+          "n": 64,
+          "min": 0.965,
+          "p05": 1.176,
+          "p25": 1.189,
+          "p50": 1.195,
+          "p75": 1.201,
+          "p95": 1.212,
+          "max": 1.226
+        }
+      },
+      "log_perte_moyenne_sur_le_gagnant_memes_courses": {
+        "INTERNET:directe": {
+          "n": 56,
+          "moyenne": 1.8921
+        },
+        "INTERNET:reference": {
+          "n": 56,
+          "moyenne": 1.9633
+        },
+        "OFFLINE:directe": {
+          "n": 56,
+          "moyenne": 1.8904
+        },
+        "OFFLINE:reference": {
+          "n": 56,
+          "moyenne": 2.0195
+        }
+      },
+      "ecart_max_proba_mises_exactes_vs_cote_arrondie": {
+        "n": 115,
+        "min": 0.001,
+        "p05": 0.0018,
+        "p25": 0.0035,
+        "p50": 0.0057,
+        "p75": 0.0099,
+        "p95": 0.0156,
+        "max": 0.0227
+      },
+      "taux_de_retour_simple_gagnant": {
+        "INTERNET": {
+          "n": 57,
+          "min": 0.798,
+          "p05": 0.825,
+          "p25": 0.845,
+          "p50": 0.853,
+          "p75": 0.858,
+          "p95": 0.871,
+          "max": 0.879
+        },
+        "OFFLINE": {
+          "n": 56,
+          "min": 0.806,
+          "p05": 0.815,
+          "p25": 0.832,
+          "p50": 0.839,
+          "p75": 0.846,
+          "p95": 0.854,
+          "max": 0.858
+        }
+      }
+    },
+    "point_4_performances_detaillees": {
+      "statuts_http_par_annee": {
+        "2021:200": 14,
+        "2021:204": 2,
+        "2022:200": 8,
+        "2023:200": 14,
+        "2023:204": 2,
+        "2024:200": 8,
+        "2025:200": 7,
+        "2025:204": 1,
+        "2026:200": 8
+      },
+      "chevaux": 758,
+      "performances_par_cheval": {
+        "n": 758,
+        "min": 0,
+        "p05": 3.0,
+        "p25": 5.0,
+        "p50": 5.0,
+        "p75": 5.0,
+        "p95": 5.0,
+        "max": 5
+      },
+      "chevaux_avec_performance_non_anterieure_a_la_course": 0,
+      "exemples_date_non_anterieure": [],
+      "statuts_arrivee_vs_premier_jeton_musique": {
+        "DISQUALIFIE|None -> D": 140,
+        "NON_PLACE|None -> 0": 69,
+        "DISQUALIFIE_POUR_ALLURE_IRREGULIERE|AI -> D": 22,
+        "NON_PLACE|DP -> 0": 9,
+        "NON_PLACE|DP -> 8": 6,
+        "NON_PLACE|DP -> 7": 6,
+        "NON_PLACE|DP -> 6": 6,
+        "ARRETE|None -> A": 2,
+        "NON_PLACE|DP -> 9": 2,
+        "DISQUALIFIE|None -> R": 1,
+        "NON_PLACE|DP -> D": 1
+      },
+      "champs_performance": [
+        "allocation",
+        "date",
+        "discipline",
+        "distance",
+        "etatTerrain",
+        "hippodrome",
+        "nbParticipants",
+        "nomPrix",
+        "participants",
+        "tempsDuPremier",
+        "timezoneOffset"
+      ]
+    },
+    "identifiant_cheval": {
+      "participants_avec_idCheval_par_annee": {
+        "2025": 623,
+        "2026": 497
+      },
+      "idCheval_egal_nom_mere_pere_par_annee": {
+        "2025": 623,
+        "2026": 497
+      },
+      "participants_avec_pere_et_mere_par_annee": {
+        "2021": 639,
+        "2022": 598,
+        "2023": 1272,
+        "2024": 773,
+        "2025": 623,
+        "2026": 497
+      },
+      "exemples_differents": []
+    },
+    "champs_participant": {
+      "communs_a_toutes_les_annees": [
+        "age",
+        "allure",
+        "deferre",
+        "dernierRapportDirect",
+        "dernierRapportReference",
+        "driver",
+        "driverChange",
+        "ecurie",
+        "eleveur",
+        "engagement",
+        "entraineur",
+        "gainsParticipant",
+        "handicapDistance",
+        "handicapPoids",
+        "incident",
+        "indicateurInedit",
+        "jumentPleine",
+        "musique",
+        "nom",
+        "nomMere",
+        "nomPere",
+        "nombreCourses",
+        "nombrePlaces",
+        "nombrePlacesSecond",
+        "nombrePlacesTroisieme",
+        "nombreVictoires",
+        "numPmu",
+        "oeilleres",
+        "ordreArrivee",
+        "placeCorde",
+        "poidsConditionMonte",
+        "poidsConditionMonteChange",
+        "proprietaire",
+        "race",
+        "reductionKilometrique",
+        "robe",
+        "sexe",
+        "statut",
+        "supplement",
+        "tempsObtenu",
+        "urlCasaque"
+      ],
+      "specifiques_par_annee": {
+        "2021": {},
+        "2022": {
+          "tauxReclamation": 0.102
+        },
+        "2023": {
+          "avisEntraineur": 0.8184,
+          "tauxReclamation": 0.0094
+        },
+        "2024": {
+          "avisEntraineur": 0.7361
+        },
+        "2025": {
+          "avisEntraineur": 1.0,
+          "idCheval": 1.0
+        },
+        "2026": {
+          "avisEntraineur": 1.0,
+          "commentaireApresCourse": 0.6338,
+          "idCheval": 1.0,
+          "tauxReclamation": 0.0282
+        }
+      }
+    },
+    "enumerations": {
+      "avisEntraineur": {
+        "NEUTRE": 2224,
+        "POSITIF": 373,
+        "NEGATIF": 133
+      },
+      "deferre": {
+        "DEFERRE_ANTERIEURS_POSTERIEURS": 1652,
+        "None": 1522,
+        "DEFERRE_POSTERIEURS": 389,
+        "PROTEGE_ANTERIEURS_DEFERRRE_POSTERIEURS": 298,
+        "DEFERRE_ANTERIEURS": 190,
+        "PROTEGE_ANTERIEURS": 180,
+        "PROTEGE_ANTERIEURS_POSTERIEURS": 133,
+        "PROTEGE_POSTERIEURS": 24,
+        "DEFERRE_ANTERIEURS_PROTEGE_POSTERIEURS": 14
+      },
+      "incident": {
+        "DISQUALIFIE_POUR_ALLURE_IRREGULIERE": 905,
+        "NON_PARTANT": 83,
+        "DISTANCE": 20,
+        "ARRETE": 13,
+        "TOMBE": 3,
+        "RESTE_AU_POTEAU": 1,
+        "DISQUALIFIE_POTEAU_GALOP": 1
+      },
+      "oeilleres": {
+        "SANS_OEILLERES": 4402
+      },
+      "statut": {
+        "PARTANT": 4319,
+        "NON_PARTANT": 83
+      }
+    },
+    "anomalies": []
+  },
+  "comptage": {
+    "fenetre": {
+      "debut": "2021-10-01",
+      "fin": "2026-09-30",
+      "jours": 1826
+    },
+    "statuts_http_programme": {
+      "200": 1825,
+      "204": 1
+    },
+    "jours_sans_course": [
+      "2024-11-07"
+    ],
+    "par_periode_de_12_mois": {
+      "2021-10 -> 2022-10": {
+        "courses|OBSTACLE|ETR": 52,
+        "courses|OBSTACLE|FRA": 1406,
+        "courses|PLAT|ETR": 3209,
+        "courses|PLAT|FRA": 4175,
+        "courses|TROT_ATTELE|ETR": 1578,
+        "courses|TROT_ATTELE|FRA": 6341,
+        "courses|TROT_MONTE|ETR": 20,
+        "courses|TROT_MONTE|FRA": 1085,
+        "partants|OBSTACLE|ETR": 689,
+        "partants|OBSTACLE|FRA": 13475,
+        "partants|PLAT|ETR": 34718,
+        "partants|PLAT|FRA": 45384,
+        "partants|TROT_ATTELE|ETR": 16696,
+        "partants|TROT_ATTELE|FRA": 83772,
+        "partants|TROT_MONTE|ETR": 180,
+        "partants|TROT_MONTE|FRA": 13122,
+        "reunions|ETR": 942,
+        "reunions|FRA": 1709
+      },
+      "2022-10 -> 2023-10": {
+        "courses|OBSTACLE|ETR": 52,
+        "courses|OBSTACLE|FRA": 1396,
+        "courses|PLAT|ETR": 3419,
+        "courses|PLAT|FRA": 4152,
+        "courses|TROT_ATTELE|ETR": 1619,
+        "courses|TROT_ATTELE|FRA": 6393,
+        "courses|TROT_MONTE|ETR": 14,
+        "courses|TROT_MONTE|FRA": 1093,
+        "partants|OBSTACLE|ETR": 668,
+        "partants|OBSTACLE|FRA": 13399,
+        "partants|PLAT|ETR": 36381,
+        "partants|PLAT|FRA": 45656,
+        "partants|TROT_ATTELE|ETR": 17314,
+        "partants|TROT_ATTELE|FRA": 84389,
+        "partants|TROT_MONTE|ETR": 137,
+        "partants|TROT_MONTE|FRA": 12832,
+        "reunions|ETR": 973,
+        "reunions|FRA": 1705
+      },
+      "2023-10 -> 2024-10": {
+        "courses|OBSTACLE|ETR": 56,
+        "courses|OBSTACLE|FRA": 1329,
+        "courses|PLAT|ETR": 3914,
+        "courses|PLAT|FRA": 4152,
+        "courses|TROT_ATTELE|ETR": 1624,
+        "courses|TROT_ATTELE|FRA": 6478,
+        "courses|TROT_MONTE|ETR": 18,
+        "courses|TROT_MONTE|FRA": 1074,
+        "partants|OBSTACLE|ETR": 646,
+        "partants|OBSTACLE|FRA": 13187,
+        "partants|PLAT|ETR": 41356,
+        "partants|PLAT|FRA": 46525,
+        "partants|TROT_ATTELE|ETR": 16761,
+        "partants|TROT_ATTELE|FRA": 86827,
+        "partants|TROT_MONTE|ETR": 156,
+        "partants|TROT_MONTE|FRA": 12858,
+        "reunions|ETR": 1062,
+        "reunions|FRA": 1696
+      },
+      "2024-10 -> 2025-10": {
+        "courses|OBSTACLE|ETR": 56,
+        "courses|OBSTACLE|FRA": 1392,
+        "courses|PLAT|ETR": 4278,
+        "courses|PLAT|FRA": 4133,
+        "courses|TROT_ATTELE|ETR": 1621,
+        "courses|TROT_ATTELE|FRA": 6480,
+        "courses|TROT_MONTE|ETR": 20,
+        "courses|TROT_MONTE|FRA": 1050,
+        "partants|OBSTACLE|ETR": 773,
+        "partants|OBSTACLE|FRA": 14131,
+        "partants|PLAT|ETR": 45100,
+        "partants|PLAT|FRA": 47207,
+        "partants|TROT_ATTELE|ETR": 16564,
+        "partants|TROT_ATTELE|FRA": 86095,
+        "partants|TROT_MONTE|ETR": 172,
+        "partants|TROT_MONTE|FRA": 12620,
+        "reunions|ETR": 1124,
+        "reunions|FRA": 1693
+      },
+      "2025-10 -> 2026-10": {
+        "courses|OBSTACLE|ETR": 67,
+        "courses|OBSTACLE|FRA": 1337,
+        "courses|PLAT|ETR": 5166,
+        "courses|PLAT|FRA": 4098,
+        "courses|TROT_ATTELE|ETR": 2051,
+        "courses|TROT_ATTELE|FRA": 6320,
+        "courses|TROT_MONTE|ETR": 33,
+        "courses|TROT_MONTE|FRA": 1042,
+        "partants|OBSTACLE|ETR": 863,
+        "partants|OBSTACLE|FRA": 13408,
+        "partants|PLAT|ETR": 53616,
+        "partants|PLAT|FRA": 46762,
+        "partants|TROT_ATTELE|ETR": 20657,
+        "partants|TROT_ATTELE|FRA": 82726,
+        "partants|TROT_MONTE|ETR": 279,
+        "partants|TROT_MONTE|FRA": 12436,
+        "reunions|ETR": 1197,
+        "reunions|FRA": 1679
+      }
+    },
+    "total": {
+      "courses|OBSTACLE|ETR": 283,
+      "courses|OBSTACLE|FRA": 6860,
+      "courses|PLAT|ETR": 19986,
+      "courses|PLAT|FRA": 20710,
+      "courses|TROT_ATTELE|ETR": 8493,
+      "courses|TROT_ATTELE|FRA": 32012,
+      "courses|TROT_MONTE|ETR": 105,
+      "courses|TROT_MONTE|FRA": 5344,
+      "partants|OBSTACLE|ETR": 3639,
+      "partants|OBSTACLE|FRA": 67600,
+      "partants|PLAT|ETR": 211171,
+      "partants|PLAT|FRA": 231534,
+      "partants|TROT_ATTELE|ETR": 87992,
+      "partants|TROT_ATTELE|FRA": 423809,
+      "partants|TROT_MONTE|ETR": 924,
+      "partants|TROT_MONTE|FRA": 63868,
+      "reunions|ETR": 5298,
+      "reunions|FRA": 8482
+    },
+    "heure_locale_premier_depart": {
+      "n": 1825,
+      "min": 4.33,
+      "p05": 8.75,
+      "p25": 10.83,
+      "p50": 11.27,
+      "p75": 11.58,
+      "p95": 11.92,
+      "max": 12.92
+    },
+    "heure_locale_dernier_depart": {
+      "n": 1825,
+      "min": 17.32,
+      "p05": 21.11,
+      "p25": 22.4,
+      "p50": 23.17,
+      "p75": 23.5,
+      "p95": 24.0,
+      "max": 39.87
+    },
+    "dimensionnement_backfill": {
+      "hypothese": "1 requête/s, 28800 requêtes par nuit de 8 h, 7 appels par course et 1 programme par jour",
+      "courses": {
+        "trot_france": 37356,
+        "trot": 45954,
+        "toutes_disciplines": 93793
+      },
+      "requetes": {
+        "trot_france": 263318,
+        "trot": 323504,
+        "toutes_disciplines": 658377
+      },
+      "nuits": {
+        "trot_france": 9.1,
+        "trot": 11.2,
+        "toutes_disciplines": 22.9
+      }
+    }
+  },
+  "point_6_debit": {
+    "appels": 2505,
+    "premier_appel": "2026-10-10T20:25:53+00:00",
+    "dernier_appel": "2026-10-10T21:09:20+00:00",
+    "intervalle_configure_s": 1.0,
+    "intervalle_moyen_observe_s": 1.02,
+    "statuts_http": {
+      "200": 2479,
+      "204": 26
+    },
+    "refus_403_429": 0,
+    "erreurs_reseau": 0,
+    "exemples_erreurs": [],
+    "latence_ms": {
+      "n": 2505,
+      "min": 34,
+      "p05": 57.2,
+      "p25": 180.0,
+      "p50": 226.0,
+      "p75": 259.0,
+      "p95": 345.8,
+      "max": 1386
+    },
+    "octets_par_reponse": {
+      "n": 2479,
+      "min": 1188,
+      "p05": 8631.3,
+      "p25": 107107.5,
+      "p50": 251685.0,
+      "p75": 291223.0,
+      "p95": 393893.3,
+      "max": 558054
+    },
+    "volume_total_mo": 536.9,
+    "x_cache": {
+      "Miss from cloudfront": 2503,
+      "Hit from cloudfront": 2
+    },
+    "entetes_de_limitation_vus": [],
+    "cache_control": {
+      "absent": 2505
+    }
+  }
+}
