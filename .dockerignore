@@ -1,0 +1,13 @@
+# Le contexte de construction ne contient que ce dont l'image a besoin :
+# pyproject.toml, uv.lock, README.md et src/.
+.git
+.venv
+data
+docs
+tests
+scripts
+.env
+.env.*
+**/__pycache__
+.pytest_cache
+.ruff_cache

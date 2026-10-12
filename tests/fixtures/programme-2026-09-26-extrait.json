@@ -1,0 +1,656 @@
+{
+ "programme": {
+  "date": 1790373600000,
+  "timezoneOffset": 7200000,
+  "reunions": [
+   {
+    "cached": false,
+    "timezoneOffset": 7200000,
+    "dateReunion": 1790373600000,
+    "numOfficiel": 2,
+    "numOfficielReunionPrecedente": 1,
+    "numOfficielReunionSuivante": 3,
+    "numExterne": 2,
+    "nature": "DIURNE",
+    "hippodrome": {
+     "code": "SON",
+     "libelleCourt": "SON PARDO",
+     "libelleLong": "HIPPODROME DE SON PARDO PALMA"
+    },
+    "pays": {
+     "code": "ESP",
+     "libelle": "Espagne"
+    },
+    "courses": [
+     {
+      "cached": false,
+      "departImminent": false,
+      "arriveeDefinitive": true,
+      "timezoneOffset": 7200000,
+      "numReunion": 2,
+      "numExterneReunion": 2,
+      "numOrdre": 1,
+      "numExterne": 1,
+      "heureDepart": 1790414040000,
+      "libelle": "GRAN PREMI SOCIETE DU TROTTEUR FRANCAIS ESPAGNE",
+      "libelleCourt": "STE TROT. FRA.",
+      "montantPrix": 8000,
+      "parcours": "",
+      "distance": 2650,
+      "distanceUnit": "METRE",
+      "discipline": "ATTELE",
+      "specialite": "TROT_ATTELE",
+      "categorieParticularite": "AUTOSTART",
+      "conditionSexe": "TOUS_CHEVAUX",
+      "nombreDeclaresPartants": 7,
+      "grandPrixNationalTrot": false,
+      "numSocieteMere": 974301,
+      "pariMultiCourses": false,
+      "pariSpecial": false,
+      "montantTotalOffert": 8000,
+      "montantOffert1er": 3680,
+      "montantOffert2eme": 1840,
+      "montantOffert3eme": 960,
+      "montantOffert4eme": 560,
+      "montantOffert5eme": 400,
+      "conditions": "GRAN PREMI SOCIETE DU TROTTEUR FRANCAIS Course 01 Départ à l'Autostart 8.000 - A",
+      "numCourseDedoublee": 0,
+      "statut": "FIN_COURSE",
+      "categorieStatut": "ARRIVEE",
+      "dureeCourse": 204450,
+      "participants": [],
+      "ecuries": [],
+      "incidents": [
+       {
+        "type": "DISQUALIFIE_POUR_ALLURE_IRREGULIERE",
+        "numeroParticipants": [
+         2
+        ]
+       }
+      ],
+      "rapportsDefinitifsDisponibles": true,
+      "isArriveeDefinitive": true,
+      "isDepartImminent": false,
+      "isDepartAJPlusUn": false,
+      "cagnottes": [],
+      "pronosticsExpires": false,
+      "replayDisponible": false,
+      "hippodrome": {
+       "codeHippodrome": "SON",
+       "libelleCourt": "SON PARDO",
+       "libelleLong": "HIPPODROME DE SON PARDO PALMA"
+      },
+      "epcPourTousParis": true,
+      "courseTrackee": false,
+      "courseExclusiveInternet": false,
+      "formuleChampLibreIndisponible": false,
+      "ordreArrivee": [
+       [
+        3
+       ],
+       [
+        5
+       ],
+       [
+        4
+       ],
+       [
+        1
+       ],
+       [
+        6
+       ],
+       [
+        7
+       ]
+      ],
+      "hasEParis": true
+     },
+     {
+      "cached": false,
+      "departImminent": false,
+      "arriveeDefinitive": true,
+      "timezoneOffset": 7200000,
+      "numReunion": 2,
+      "numExterneReunion": 2,
+      "numOrdre": 2,
+      "numExterne": 2,
+      "heureDepart": 1790415960000,
+      "libelle": "CRITERIUM NACIONAL                      ESPAGNE",
+      "libelleCourt": "CRIT. NACIONAL",
+      "montantPrix": 9000,
+      "parcours": "",
+      "distance": 3150,
+      "distanceUnit": "METRE",
+      "discipline": "ATTELE",
+      "specialite": "TROT_ATTELE",
+      "categorieParticularite": "AUTOSTART",
+      "conditionSexe": "TOUS_CHEVAUX",
+      "nombreDeclaresPartants": 7,
+      "grandPrixNationalTrot": false,
+      "numSocieteMere": 974302,
+      "pariMultiCourses": false,
+      "pariSpecial": false,
+      "montantTotalOffert": 9000,
+      "montantOffert1er": 4140,
+      "montantOffert2eme": 2070,
+      "montantOffert3eme": 1080,
+      "montantOffert4eme": 630,
+      "montantOffert5eme": 450,
+      "conditions": "CRITERIUM NACIONAL Course 02 Départ à l'Autostart 9.000 - Attelé. - 3.150 mètres",
+      "numCourseDedoublee": 0,
+      "statut": "FIN_COURSE",
+      "categorieStatut": "ARRIVEE",
+      "dureeCourse": 243730,
+      "participants": [],
+      "ecuries": [],
+      "incidents": [
+       {
+        "type": "DISQUALIFIE_POUR_ALLURE_IRREGULIERE",
+        "numeroParticipants": [
+         6
+        ]
+       }
+      ],
+      "rapportsDefinitifsDisponibles": true,
+      "isArriveeDefinitive": true,
+      "isDepartImminent": false,
+      "isDepartAJPlusUn": false,
+      "cagnottes": [],
+      "pronosticsExpires": false,
+      "replayDisponible": false,
+      "hippodrome": {
+       "codeHippodrome": "SON",
+       "libelleCourt": "SON PARDO",
+       "libelleLong": "HIPPODROME DE SON PARDO PALMA"
+      },
+      "epcPourTousParis": true,
+      "courseTrackee": false,
+      "courseExclusiveInternet": false,
+      "formuleChampLibreIndisponible": false,
+      "ordreArrivee": [
+       [
+        5
+       ],
+       [
+        1
+       ],
+       [
+        3
+       ],
+       [
+        7
+       ],
+       [
+        2
+       ],
+       [
+        4
+       ]
+      ],
+      "hasEParis": true
+     },
+     {
+      "cached": false,
+      "departImminent": false,
+      "arriveeDefinitive": true,
+      "timezoneOffset": 7200000,
+      "numReunion": 2,
+      "numExterneReunion": 2,
+      "numOrdre": 3,
+      "numExterne": 3,
+      "heureDepart": 1790417880000,
+      "libelle": "ANIVERSARI FEDERACIO BALEAR DE TROT     ESPAGNE",
+      "libelleCourt": "BALEAR DE TROT",
+      "montantPrix": 6000,
+      "parcours": "",
+      "distance": 2650,
+      "distanceUnit": "METRE",
+      "discipline": "ATTELE",
+      "specialite": "TROT_ATTELE",
+      "categorieParticularite": "AUTOSTART",
+      "conditionSexe": "TOUS_CHEVAUX",
+      "nombreDeclaresPartants": 9,
+      "grandPrixNationalTrot": false,
+      "numSocieteMere": 974303,
+      "pariMultiCourses": false,
+      "pariSpecial": false,
+      "montantTotalOffert": 6000,
+      "montantOffert1er": 2760,
+      "montantOffert2eme": 1380,
+      "montantOffert3eme": 720,
+      "montantOffert4eme": 420,
+      "montantOffert5eme": 300,
+      "conditions": "ANIVERSARI FEDERACIO BALEAR DE TROT Course 03 Départ à l'Autostart 6.000 - Attel",
+      "numCourseDedoublee": 0,
+      "statut": "FIN_COURSE",
+      "categorieStatut": "ARRIVEE",
+      "dureeCourse": 202560,
+      "participants": [],
+      "ecuries": [],
+      "rapportsDefinitifsDisponibles": true,
+      "isArriveeDefinitive": true,
+      "isDepartImminent": false,
+      "isDepartAJPlusUn": false,
+      "cagnottes": [],
+      "pronosticsExpires": false,
+      "replayDisponible": false,
+      "hippodrome": {
+       "codeHippodrome": "SON",
+       "libelleCourt": "SON PARDO",
+       "libelleLong": "HIPPODROME DE SON PARDO PALMA"
+      },
+      "epcPourTousParis": true,
+      "courseTrackee": false,
+      "courseExclusiveInternet": false,
+      "formuleChampLibreIndisponible": false,
+      "ordreArrivee": [
+       [
+        2
+       ],
+       [
+        5
+       ],
+       [
+        6
+       ],
+       [
+        9
+       ],
+       [
+        1
+       ],
+       [
+        7
+       ],
+       [
+        4
+       ],
+       [
+        3
+       ],
+       [
+        8
+       ]
+      ],
+      "hasEParis": true
+     }
+    ],
+    "audience": "NATIONAL",
+    "statut": "TERMINEE",
+    "disciplinesMere": [
+     "TROT"
+    ],
+    "specialites": [
+     "TROT_ATTELE"
+    ],
+    "derniereReunion": false,
+    "meteo": {
+     "datePrevision": 1790436660000,
+     "nebulositeCode": "P4",
+     "nebulositeLibelleCourt": "Ciel voilé",
+     "nebulositeLibelleLong": "Le soleil l'emportera et les nuages resteront discrets.",
+     "temperature": 29,
+     "forceVent": 10,
+     "directionVent": "E"
+    },
+    "cagnottes": [],
+    "reportPlusFpaMax": 20
+   },
+   {
+    "cached": false,
+    "timezoneOffset": 7200000,
+    "dateReunion": 1790373600000,
+    "numOfficiel": 4,
+    "numOfficielReunionPrecedente": 3,
+    "numOfficielReunionSuivante": 5,
+    "numExterne": 4,
+    "nature": "SEMINOCTURNE",
+    "hippodrome": {
+     "code": "ENG",
+     "libelleCourt": "ENGHIEN",
+     "libelleLong": "HIPPODROME D'ENGHIEN SOISY"
+    },
+    "pays": {
+     "code": "FRA",
+     "libelle": "FRANCE"
+    },
+    "courses": [
+     {
+      "cached": false,
+      "departImminent": false,
+      "arriveeDefinitive": true,
+      "timezoneOffset": 7200000,
+      "numReunion": 4,
+      "numExterneReunion": 4,
+      "numOrdre": 1,
+      "numExterne": 1,
+      "heureDepart": 1790431620000,
+      "libelle": "PRIX DU PONT MARIE",
+      "libelleCourt": "DU PONT MARIE",
+      "montantPrix": 38000,
+      "parcours": "",
+      "distance": 2150,
+      "distanceUnit": "METRE",
+      "corde": "CORDE_GAUCHE",
+      "discipline": "ATTELE",
+      "specialite": "TROT_ATTELE",
+      "categorieParticularite": "AUTOSTART",
+      "conditionSexe": "MALES_ET_HONGRES",
+      "nombreDeclaresPartants": 13,
+      "grandPrixNationalTrot": false,
+      "numSocieteMere": 750207,
+      "pariMultiCourses": false,
+      "pariSpecial": false,
+      "montantTotalOffert": 38000,
+      "montantOffert1er": 17100,
+      "montantOffert2eme": 9500,
+      "montantOffert3eme": 5320,
+      "montantOffert4eme": 3040,
+      "montantOffert5eme": 1900,
+      "conditions": "PRIX DU PONT MARIE Course  7 Course C Départ à l'Autostart 38.000. - Attelé, mâl",
+      "numCourseDedoublee": 0,
+      "statut": "ARRIVEE_DEFINITIVE_COMPLETE",
+      "categorieStatut": "ARRIVEE",
+      "dureeCourse": 163700,
+      "participants": [],
+      "ecuries": [],
+      "incidents": [
+       {
+        "type": "DISQUALIFIE_POUR_ALLURE_IRREGULIERE",
+        "numeroParticipants": [
+         1,
+         2,
+         6,
+         8
+        ]
+       }
+      ],
+      "rapportsDefinitifsDisponibles": true,
+      "isArriveeDefinitive": true,
+      "isDepartImminent": false,
+      "isDepartAJPlusUn": false,
+      "cagnottes": [],
+      "pronosticsExpires": false,
+      "replayDisponible": true,
+      "hippodrome": {
+       "codeHippodrome": "ENG",
+       "libelleCourt": "ENGHIEN",
+       "libelleLong": "HIPPODROME D'ENGHIEN SOISY"
+      },
+      "epcPourTousParis": true,
+      "courseTrackee": false,
+      "courseExclusiveInternet": false,
+      "formuleChampLibreIndisponible": false,
+      "ordreArrivee": [
+       [
+        5
+       ],
+       [
+        3
+       ],
+       [
+        12
+       ],
+       [
+        4
+       ],
+       [
+        7
+       ],
+       [
+        13
+       ],
+       [
+        11
+       ],
+       [
+        9
+       ],
+       [
+        10
+       ]
+      ],
+      "hasEParis": true
+     },
+     {
+      "cached": false,
+      "departImminent": false,
+      "arriveeDefinitive": true,
+      "timezoneOffset": 7200000,
+      "numReunion": 4,
+      "numExterneReunion": 4,
+      "numOrdre": 2,
+      "numExterne": 2,
+      "heureDepart": 1790433780000,
+      "libelle": "PRIX DE JARNAC",
+      "libelleCourt": "DE JARNAC",
+      "montantPrix": 35000,
+      "parcours": "",
+      "distance": 2875,
+      "distanceUnit": "METRE",
+      "corde": "CORDE_GAUCHE",
+      "discipline": "ATTELE",
+      "specialite": "TROT_ATTELE",
+      "categorieParticularite": "INCONNU",
+      "conditionSexe": "MALES_ET_HONGRES",
+      "nombreDeclaresPartants": 16,
+      "grandPrixNationalTrot": false,
+      "numSocieteMere": 750201,
+      "pariMultiCourses": false,
+      "pariSpecial": false,
+      "montantTotalOffert": 35000,
+      "montantOffert1er": 15750,
+      "montantOffert2eme": 8750,
+      "montantOffert3eme": 4900,
+      "montantOffert4eme": 2800,
+      "montantOffert5eme": 1750,
+      "conditions": "PRIX DE JARNAC Course  1 Course E 35.000. - Attelé, mâles. - 2.875 mètres. 15.75",
+      "numCourseDedoublee": 0,
+      "statut": "ARRIVEE_DEFINITIVE_COMPLETE",
+      "categorieStatut": "ARRIVEE",
+      "dureeCourse": 212800,
+      "participants": [],
+      "ecuries": [],
+      "incidents": [
+       {
+        "type": "DISQUALIFIE_POUR_ALLURE_IRREGULIERE",
+        "numeroParticipants": [
+         15
+        ]
+       }
+      ],
+      "rapportsDefinitifsDisponibles": true,
+      "isArriveeDefinitive": true,
+      "isDepartImminent": false,
+      "isDepartAJPlusUn": false,
+      "cagnottes": [],
+      "pronosticsExpires": false,
+      "replayDisponible": true,
+      "hippodrome": {
+       "codeHippodrome": "ENG",
+       "libelleCourt": "ENGHIEN",
+       "libelleLong": "HIPPODROME D'ENGHIEN SOISY"
+      },
+      "epcPourTousParis": true,
+      "courseTrackee": false,
+      "courseExclusiveInternet": false,
+      "formuleChampLibreIndisponible": false,
+      "ordreArrivee": [
+       [
+        16
+       ],
+       [
+        9
+       ],
+       [
+        8
+       ],
+       [
+        12
+       ],
+       [
+        2
+       ],
+       [
+        7
+       ],
+       [
+        3
+       ],
+       [
+        10
+       ],
+       [
+        5
+       ],
+       [
+        6
+       ],
+       [
+        1
+       ],
+       [
+        13
+       ],
+       [
+        14
+       ],
+       [
+        11
+       ],
+       [
+        4
+       ]
+      ],
+      "hasEParis": true
+     },
+     {
+      "cached": false,
+      "departImminent": false,
+      "arriveeDefinitive": true,
+      "timezoneOffset": 7200000,
+      "numReunion": 4,
+      "numExterneReunion": 4,
+      "numOrdre": 3,
+      "numExterne": 3,
+      "heureDepart": 1790435820000,
+      "libelle": "PRIX DU COTENTIN",
+      "libelleCourt": "DU COTENTIN",
+      "montantPrix": 18000,
+      "parcours": "",
+      "distance": 2150,
+      "distanceUnit": "METRE",
+      "corde": "CORDE_GAUCHE",
+      "discipline": "ATTELE",
+      "specialite": "TROT_ATTELE",
+      "categorieParticularite": "A_RECLAMER_AUTOSTART",
+      "conditionSexe": "TOUS_CHEVAUX",
+      "nombreDeclaresPartants": 14,
+      "grandPrixNationalTrot": false,
+      "numSocieteMere": 750202,
+      "pariMultiCourses": false,
+      "pariSpecial": false,
+      "montantTotalOffert": 18000,
+      "montantOffert1er": 8100,
+      "montantOffert2eme": 4500,
+      "montantOffert3eme": 2520,
+      "montantOffert4eme": 1440,
+      "montantOffert5eme": 900,
+      "conditions": "PRIX DU COTENTIN Course  2 Course R Course \"A RECLAMER\" Départ à l'Autostart 18.",
+      "numCourseDedoublee": 0,
+      "statut": "ARRIVEE_DEFINITIVE_COMPLETE",
+      "categorieStatut": "ARRIVEE",
+      "dureeCourse": 157500,
+      "participants": [],
+      "ecuries": [],
+      "incidents": [
+       {
+        "type": "ARRETE",
+        "numeroParticipants": [
+         11
+        ]
+       },
+       {
+        "type": "DISQUALIFIE_POUR_ALLURE_IRREGULIERE",
+        "numeroParticipants": [
+         7,
+         9,
+         10,
+         12
+        ]
+       }
+      ],
+      "rapportsDefinitifsDisponibles": true,
+      "isArriveeDefinitive": true,
+      "isDepartImminent": false,
+      "isDepartAJPlusUn": false,
+      "cagnottes": [],
+      "pronosticsExpires": false,
+      "replayDisponible": true,
+      "hippodrome": {
+       "codeHippodrome": "ENG",
+       "libelleCourt": "ENGHIEN",
+       "libelleLong": "HIPPODROME D'ENGHIEN SOISY"
+      },
+      "epcPourTousParis": true,
+      "courseTrackee": false,
+      "courseExclusiveInternet": false,
+      "formuleChampLibreIndisponible": false,
+      "ordreArrivee": [
+       [
+        5
+       ],
+       [
+        1
+       ],
+       [
+        2
+       ],
+       [
+        3
+       ],
+       [
+        4
+       ],
+       [
+        6
+       ],
+       [
+        13
+       ],
+       [
+        14
+       ],
+       [
+        8
+       ]
+      ],
+      "hasEParis": true
+     }
+    ],
+    "audience": "NATIONAL",
+    "statut": "TERMINEE",
+    "disciplinesMere": [
+     "TROT"
+    ],
+    "specialites": [
+     "TROT_ATTELE",
+     "TROT_MONTE"
+    ],
+    "derniereReunion": false,
+    "meteo": {
+     "datePrevision": 1790443020000,
+     "nebulositeCode": "P1",
+     "nebulositeLibelleCourt": "Ensoleillé",
+     "nebulositeLibelleLong": "Le soleil brillera généreusement.",
+     "temperature": 22,
+     "forceVent": 6,
+     "directionVent": "NO"
+    },
+    "cagnottes": [],
+    "reportPlusFpaMax": 20
+   }
+  ]
+ }
+}

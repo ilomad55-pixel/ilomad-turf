@@ -1,7 +1,8 @@
 # Spécification de la source PMU (API turfinfo)
 
-> **Version** : 1.0 | **Date** : 10/10/2026 | **Statut** : à valider par Olivier (critère de sortie du sprint 0)
+> **Version** : 1.1 | **Date** : 12/10/2026 | **Statut** : à valider par Olivier (critère de sortie du sprint 0)
 > **Origine des chiffres** : spike du 10/10/2026, [rapport JSON](./spike/rapport-spike-source-pmu.json), rejouable avec `python scripts\spike_source_pmu.py`
+> **Correction de la version 1.1** : la version 1.0 affirmait qu'aucune réponse ne venait d'un cache. C'est faux pour 2 réponses sur 2 505 ; voir § 4.9 et § 6.5.
 
 Ce document est la référence pour quiconque écrit du code qui parle au PMU ou qui lit ses réponses. Il dit ce que la source renvoie **réellement**, mesures à l'appui, et ce que cela change pour le projet.
 
@@ -34,7 +35,7 @@ Quatre découvertes que le plan n'avait pas prévues :
 | Racine | `https://online.turfinfo.api.pmu.fr/rest/client/7` |
 | Authentification | Aucune |
 | Format | JSON, UTF-8, compression gzip acceptée |
-| Hébergement | Derrière CloudFront. Aucun en-tête de cache ni de limitation de débit dans les réponses |
+| Hébergement | Derrière CloudFront, qui sert parfois une réponse depuis son cache (en-têtes `x-cache` et `age`, § 4.9). Aucun en-tête de limitation de débit |
 | Date dans l'URL | `JJMMAAAA`, date du programme en heure de Paris |
 | Statut juridique | **Non documentée, sans licence.** Usage personnel, à faible débit. Peut changer ou disparaître sans préavis. |
 
@@ -127,6 +128,23 @@ La liste contient tous les chevaux classés, pas seulement les premiers : de 2 �
 ### 4.8 Le départ réel est en retard sur l'horaire
 
 `heureDepart` est l'horaire **prévu**. La cote finale est arrêtée 1,6 minute après en médiane, plus de 10 minutes après pour 5 % des courses, jusqu'à 26 minutes. Un instantané « H-2 » calé sur l'horaire prévu peut donc être pris bien avant le vrai départ.
+
+### 4.9 Une réponse peut sortir d'un cache
+
+La source est derrière CloudFront. Sur les 2 505 appels du spike, 2 ont été servis par le cache (`x-cache: Hit from cloudfront`) : le programme du jour, et les pronostics d'une course, **vieux de 833 secondes** d'après l'en-tête `age`.
+
+L'heure de collecte n'est donc pas toujours l'heure de la donnée. Règle : l'heure d'une donnée est l'heure de collecte moins `age`. Le collecteur conserve `x-cache` et `age` pour chaque réponse.
+
+Mesure sur l'essai réel du collecteur, le 12/10/2026 (367 réponses en 45 minutes) :
+
+| Ressource | Servies par le cache | Âge maximal |
+|-----------|----------------------|-------------|
+| `participants` | 9 sur 136 | 4 secondes |
+| `combinaisons` | 0 sur 134 | — |
+| `programme` | 3 sur 3 | 4 secondes |
+| `rapports-definitifs` | 29 sur 92 | 56 secondes |
+
+Pour les ressources qui portent les cotes, le retard dû au cache est donc de quelques secondes au plus sur cet essai. `turf couverture` le remesure chaque jour : réponses servies par le cache et âge maximal.
 
 ---
 
@@ -260,7 +278,8 @@ Intérêt : c'est la seule source des courses qu'un cheval a disputées **hors d
 | Erreurs réseau | **0** |
 | Latence | médiane 226 ms, 95 % sous 346 ms, maximum 1,4 s |
 | Volume transféré | 537 Mo avant compression |
-| En-têtes | `x-cache: Miss from cloudfront` sur toutes les réponses ; aucun `Cache-Control`, `Retry-After` ni `X-RateLimit-*` |
+| Cache CloudFront | `Miss` sur 2 503 réponses, `Hit` sur 2, toutes deux sur des données du jour (§ 4.9) |
+| En-têtes de limitation | Aucun `Cache-Control`, `Retry-After` ni `X-RateLimit-*` |
 
 Conclusion : à 1 requête par seconde, la source ne bronche pas. Elle n'annonce aucune limite ; on ne sait donc pas où elle se situe, et le spike ne l'a pas cherchée. Le plafond d'une requête par seconde et l'arrêt sur refus répétés restent la règle.
 
@@ -356,12 +375,13 @@ Première année : 1,6 Go de reprise, 1,5 Go de collecte, plus la base PostgreSQ
 | Volume de trot | 11 000 courses par an (bilan SETF) | 7 470 dans le flux PMU | Dimensionner sur 7 470 ; le reste n'a pas de cote |
 | Durée de la reprise | 10 à 14 nuits | 9 nuits pour le trot en France, 23 pour tout | Trot en France d'abord, le reste en tâche de fond |
 | Réponse 204, masse absente | Non prévu | Normal avant course et sur certaines réunions | Enregistrer sans alerte |
+| Heure d'une donnée | Heure de collecte | Une réponse peut sortir d'un cache, vieille de plusieurs minutes | Conserver `age` et `x-cache` ; heure de la donnée = collecte − `age` |
 
 ---
 
 ## 9. Ce que le spike n'a pas vérifié
 
-- **La forme des réponses avant une course.** L'échantillon ne contient que des courses terminées. Le § 10 n'en observe que deux en direct.
+- **La forme des réponses avant une course de trot française.** L'échantillon ne contient que des courses terminées. Le § 10 n'observe en direct que cinq courses, dont une seule de trot, vue la veille de son départ.
 - **Le plafond de débit de la source.** Le spike est resté à 1 requête par seconde, volontairement.
 - **Les disciplines autres que le trot**, et les courses courues à l'étranger.
 - **Les homonymes.** Deux chevaux distincts portant le même nom, la même mère et le même père n'ont pas été recherchés.
@@ -397,7 +417,29 @@ Ce qu'il faut en retenir :
 3. **Une masse peut ne pas exister pour une course.** Ici, pas de paris en points de vente sur une réunion étrangère de nuit.
 4. Les données non liées aux cotes sont publiées la veille : un instantané matinal suffit à les capturer.
 
-Restent à observer au sprint 1 : l'heure d'ouverture des cotes le matin, et l'existence d'une cote de référence avant H-30.
+### 10.1 Essai réel du collecteur, 12/10/2026
+
+Le collecteur a tourné 45 minutes en local, de 22 h 31 à 23 h 16, sur les dernières courses du jour : trois courses de plat au Chili et en Argentine. Les 7 instantanés avant course dus pendant l'essai ont été pris, sans échec ; les 5 qui tombaient après le démarrage l'ont été à la seconde prévue.
+
+Horodatage de la cote directe (masse internet) relevé à chaque instantané :
+
+| Course | Départ prévu | H-2 | S+1 | S+3 | S+5 | S+7 | S+9 | Cote figée à |
+|--------|--------------|-----|-----|-----|-----|-----|-----|--------------|
+| R5C5 | 22:30:00 | — | 22:31:33 | 22:32:53 | 22:34:53 | 22:36:00 | 22:36:00 | 22:36:00 |
+| R6C11 | 22:45:00 | 22:42:47 | 22:45:47 | 22:47:47 | 22:48:10 | 22:48:10 | non pris | 22:48:10 |
+| R5C6 | 23:00:00 | 22:57:45 | 23:00:55 | 23:02:55 | 23:04:55 | 23:05:20 | 23:05:20 | 23:05:20 |
+
+Ce que cet essai établit :
+
+1. **La cote directe est recalculée en continu** : tant que les paris étaient ouverts, elle datait de 1 à 25 secondes à chaque instantané.
+2. **Elle se fige au départ réel**, ici 3 à 6 minutes après l'horaire prévu. Deux instantanés de même horodatage signalent donc bien que la course est partie : sur R6C11, le collecteur a arrêté le suivi de lui-même.
+3. **Sur ces trois courses, le créneau H-2 tombait en réalité à 5, 7 et 8 minutes du départ.** Les instantanés de suivi ont capté deux à trois points de plus avant la fermeture des paris.
+4. **La cote de référence est datée de H-30 exactement** (22:00:00, 22:15:00, 22:30:00), comme dans l'historique.
+5. Aucune cote en points de vente sur ces réunions étrangères de nuit, comme observé le 10/10.
+
+Limite : trois courses, toutes étrangères, toutes de plat. **Aucune course de trot française n'a encore été observée en direct.**
+
+Restent à observer en production : l'heure d'ouverture des cotes le matin, l'existence d'une cote de référence avant H-30, et le comportement des deux masses sur une réunion française de journée.
 
 ---
 

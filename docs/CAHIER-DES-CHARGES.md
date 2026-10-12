@@ -96,11 +96,11 @@ Le projet démarre par une application personnelle. Le passage en SaaS n'est dé
 
 | ID | Module | Exigence | Priorité | Vérification |
 |----|--------|----------|----------|--------------|
-| EF-01 | Collecte | Chaque réponse HTTP est stockée telle quelle, avec son heure de collecte, avant tout traitement | Must | Fichier brut présent pour chaque ligne de `raw.document` |
+| EF-01 | Collecte | Chaque réponse HTTP est stockée telle quelle, avec son heure de collecte, avant tout traitement | Must | Fichier brut présent pour chaque ligne du journal des documents |
 | EF-02 | Collecte | Le débit ne dépasse jamais 1 requête par seconde | Must | Test du client ; journal des appels |
 | EF-03 | Collecte | La collecte s'arrête et alerte après des refus répétés (403, 429) | Must | Test avec source simulée |
 | EF-04 | Collecte | Les instantanés avant course couvrent les deux masses de paris (points de vente et internet) | Must | Deux documents par créneau |
-| EF-05 | Collecte | Un redémarrage reprend les tâches en attente sans doublon | Must | Test d'intégration sur `raw.tache_collecte` |
+| EF-05 | Collecte | Un redémarrage reprend les tâches en attente sans doublon | Must | Test de redémarrage en cours de journée, sur le journal des tâches |
 | EF-06 | Collecte | Une alerte part si un champ attendu disparaît d'une réponse | Should | Test avec réponse tronquée |
 | EF-07 | Reprise | L'historique 10/2021 → 09/2026 est chargé pour le trot, puis pour les autres disciplines | Must | Requête de couverture par mois |
 | EF-08 | Ingestion | Le parsing est rejouable : reconstruire la base depuis le brut donne une base identique | Must | Test de rejeu complet |

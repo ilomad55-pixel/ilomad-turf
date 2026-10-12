@@ -1,6 +1,8 @@
 # Architecture technique — ILOMAD-TURF
 
-> **Version** : 1.0 | **Date** : 10/10/2026 | **Auteur** : Olivier MORA avec Claude Code
+> **Version** : 1.1 | **Date** : 12/10/2026 | **Auteur** : Olivier MORA avec Claude Code
+> **Depuis la version 1.0** : le collecteur ne dépend plus de la base ([ADR 0005](./adr/0005-collecteur-ne-depend-que-du-disque.md)) ; un service de surveillance est ajouté.
+> **En production au sprint 1** : collecteur, surveillance, fichiers bruts, sauvegarde. Le reste est la cible des sprints suivants.
 
 Ce document décrit **comment** l'application est construite. Les exigences sont dans le [cahier des charges](./CAHIER-DES-CHARGES.md), le comportement de la source dans [SPEC-SOURCE-PMU.md](./SPEC-SOURCE-PMU.md), le « pourquoi » de chaque choix dans [adr/](./adr/).
 
@@ -16,13 +18,13 @@ flowchart LR
 
     subgraph VPS["VPS — /opt/ilomad-turf — Docker Compose — ports 127.0.0.1"]
         COL["collecteur"]
-        RAW[("data/raw<br/>fichiers bruts<br/>immuables")]
+        RAW[("data/raw<br/>fichiers bruts<br/>et journaux")]
+        SURV["surveillance<br/>et sauvegarde"]
         ING["ingestion<br/>(rejouable)"]
         PG[("PostgreSQL 17<br/>raw · core · ml")]
         INF["inférence<br/>H-30, H-5"]
         SVC["services/"]
         APP["Streamlit"]
-        SAV["sauvegarde<br/>nocturne"]
     end
 
     subgraph LOCAL["Poste local"]
@@ -32,16 +34,19 @@ flowchart LR
 
     PMU -->|"1 requête/s max"| COL
     COL --> RAW
-    COL -->|"tâches, journal"| PG
+    COL -.->|"battement"| SURV
+    RAW --> SURV -->|"chaque nuit"| S3
+    COL -.->|alertes| TG
+    SURV -.->|alertes| TG
     RAW --> ING --> PG
     PG --> INF -->|"pronostics<br/>en ajout seul"| PG
     PG --> SVC --> APP
-    RAW --> SAV
-    PG --> SAV --> S3
-    COL -.->|alertes| TG
+    PG --> SURV
     PG --> PQ --> TRAIN
     TRAIN -->|"modèle versionné"| INF
 ```
+
+Le collecteur n'écrit que sur le disque. Il ne connaît ni la base ni les autres services : rien de ce qui se passe en aval ne peut l'arrêter.
 
 Quatre principes structurent tout le reste ([ADR 0001](./adr/0001-brut-d-abord-et-point-in-time.md)) :
 
@@ -81,8 +86,9 @@ Chaque composant fait une seule chose. Tous partagent le même paquet Python `tu
 
 | Composant | Rôle | Entrées | Sorties | Module |
 |-----------|------|---------|---------|--------|
-| **Collecteur** | Interroger la source selon le calendrier, au débit plafonné | Programme du jour, `raw.tache_collecte` | Fichiers bruts, `raw.document` | `collecte/` |
-| **Ingestion** | Transformer le brut en tables propres ; rapprocher chevaux et personnes | Fichiers bruts | `core.*` | `ingestion/` |
+| **Collecteur** | Interroger la source selon le calendrier, au débit plafonné | Programme du jour, journal des tâches | Fichiers bruts, journaux du jour, battement | `collecte/` |
+| **Surveillance** | Alerter si le collecteur est muet ou le disque plein ; sauvegarder chaque nuit | Battement, `data/` | Alertes, copie hors VPS | `surveillance.py` |
+| **Ingestion** | Transformer le brut en tables propres ; rapprocher chevaux et personnes | Fichiers bruts et journaux | `raw.*`, `core.*` | `ingestion/` |
 | **Variables** | Calculer les variables d'un partant telles que connues à une heure donnée | `core.*`, heure de pronostic | Tableau de variables | `features/` |
 | **Modèles** | Marché, logit conditionnel, boosting, combinaison, calibration, Plackett-Luce | Variables | Probabilités, artefact versionné | `modeles/` |
 | **Évaluation** | Métriques, validation glissante, paris fictifs | `ml.prediction`, `core.resultat` | Rapports, `ml.pari_fictif` | `evaluation/` |
@@ -118,7 +124,13 @@ Soit environ 1 450 requêtes et 4 Mo compressés par jour pour 51 courses en moy
 
 **Réponses vides.** Avant une course, une cote absente ou une réponse 204 est normale. Elle est enregistrée comme les autres, sans alerte.
 
-**Reprise après arrêt.** Chaque tâche est une ligne de `raw.tache_collecte` (course, créneau, état, tentatives). Au redémarrage, le collecteur reprend les tâches en attente. Un créneau avant course dont l'heure est passée est marqué « manqué » : il ne se rattrape pas.
+**Suivi après l'horaire.** Après le départ prévu, des instantanés continuent à S+1, S+3, S+5, S+7 et S+9. Ils s'arrêtent dès que deux instantanés de suite portent le même horodatage de cote : les paris sont fermés, la course est partie.
+
+**Tolérance.** Un créneau pris trop tard n'est plus le même créneau. Chaque instantané a une limite : 20 % de son délai (12 minutes pour H-60, 6 pour H-30), 60 secondes au moins, jamais après le départ prévu. Au-delà, la tâche est consignée « manquée ».
+
+**Reprise après arrêt.** Les tâches se recalculent à partir du programme. Chaque tâche terminée est une ligne du journal `_taches.jsonl` du jour. Au redémarrage, le collecteur relit ce journal et saute ce qui est déjà consigné. Un créneau avant course dont l'heure est passée est marqué « manqué » : il ne se rattrape pas.
+
+**Clôture.** Le lendemain à 10 h, le collecteur recharge une dernière fois le programme, récupère les arrivées qui manquent, écrit le bilan du jour et l'envoie sur Telegram.
 
 ---
 
@@ -131,12 +143,18 @@ data/raw/AAAA/MM/JJ/
     programme__<collecte>.json.gz
     R<r>C<c>/
         <ressource>__<masse>__<collecte>.json.gz
+    _documents.jsonl
+    _taches.jsonl
 ```
 
 - `AAAA/MM/JJ` : date du programme, en heure de Paris.
 - `<collecte>` : heure de collecte en UTC, format `AAAAMMJJTHHMMSSZ`.
 - `<masse>` : `OFFLINE` ou `INTERNET` ; absent pour les ressources qui n'en dépendent pas.
-- Un fichier n'est jamais modifié ni supprimé. Son empreinte SHA-256 est dans `raw.document`.
+- Un fichier brut n'est jamais modifié ni supprimé. Un contenu identique au précédent n'est pas réécrit : le journal renvoie au fichier existant.
+- `_documents.jsonl` : une ligne par réponse reçue, y compris les réponses vides (204) et les erreurs. Elle porte l'adresse, l'heure de collecte, le statut, la durée, l'empreinte SHA-256, le chemin du fichier et les en-têtes de cache.
+- `_taches.jsonl` : une ligne par tâche terminée, puis une ligne de clôture avec le bilan du jour.
+
+Ces deux journaux sont en ajout seul. Avec les fichiers bruts, ils suffisent à tout reconstruire.
 
 ### 5.2 Base PostgreSQL
 
@@ -144,7 +162,7 @@ Trois schémas, du plus proche de la source au plus proche du modèle.
 
 | Schéma | Contenu | Tables principales |
 |--------|---------|--------------------|
-| `raw` | Traçabilité de la collecte | `document`, `tache_collecte` |
+| `raw` | Traçabilité de la collecte, dérivée des journaux du disque | `document`, `tache_collecte` |
 | `core` | Modèle relationnel propre | `hippodrome`, `reunion`, `course`, `cheval`, `cheval_alias`, `personne`, `partant`, `partant_snapshot`, `resultat`, `rapport` |
 | `ml` | Modèles et pronostics | `modele_version`, `prediction`, `pari_fictif`, `evaluation` |
 
@@ -170,6 +188,7 @@ L'identifiant `idCheval` de la source vaut `NOM-MÈRE-PÈRE`. Il est absent de l
 | Liste blanche des champs pré-course | `features/registre.py` | Échoue si une variable référence un champ hors liste |
 | Point-in-time | `features/point_in_time.py` filtre sur l'heure de collecte ou sur l'horodatage fourni par la source | Reconstruit une course à deux heures de pronostic, vérifie qu'aucune donnée postérieure n'est lue |
 | Cote utilisée par le modèle | Uniquement une cote dont l'horodatage précède l'heure du pronostic | Test sur une course où la cote de référence est postérieure au départ prévu |
+| Âge d'une réponse | La source est derrière un cache : une réponse peut dater de plusieurs minutes. L'heure d'une donnée est l'heure de collecte moins l'en-tête `age`, conservé dans `_documents.jsonl` | Test sur un document servi par le cache |
 | Jeu de test gelé | Marqueur d'ouverture unique | Échoue à la deuxième ouverture |
 
 Champs toujours exclus des variables d'une course : `ordreArrivee`, `tempsObtenu`, `reductionKilometrique`, `incident`, `commentaireApresCourse`, `dernierRapportDirect` (cote finale, postérieure au départ). Ils servent seulement d'historique pour les courses suivantes.
@@ -193,13 +212,14 @@ Il n'y a pas d'environnement de recette : un seul utilisateur, et le rejeu depui
 
 Le VPS héberge la production de trois clients ([ADR 0003](./adr/0003-vps-partage-entrainement-local.md)).
 
-| Service | Mémoire maximale | CPU maximal | Port (127.0.0.1) |
-|---------|------------------|-------------|------------------|
-| PostgreSQL | 512 Mo | 1,0 | 5440 |
-| Collecteur | 192 Mo | 0,25 | — |
-| Ingestion et inférence (tâches ponctuelles) | 512 Mo | 1,0 | — |
-| Streamlit | 256 Mo | 0,5 | 8510 |
-| API (« Should ») | 192 Mo | 0,25 | 8010 |
+| Service | Mémoire maximale | CPU maximal | Port (127.0.0.1) | En place |
+|---------|------------------|-------------|------------------|----------|
+| Collecteur | 192 Mo | 0,25 | — | Sprint 1 |
+| Surveillance et sauvegarde | 256 Mo | 0,25 | — | Sprint 1 |
+| PostgreSQL | 512 Mo | 1,0 | 5440 | Sprint 2 |
+| Ingestion et inférence (tâches ponctuelles) | 512 Mo | 1,0 | — | Sprint 2 |
+| Streamlit | 256 Mo | 0,5 | 8510 | Sprint 3 |
+| API (« Should ») | 192 Mo | 0,25 | 8010 | Sprint 6 |
 
 Ces plafonds sont un budget de départ, à ajuster après mesure en production. Ports déjà pris par les autres projets : 3000-3001, 4000-4001, 4010-4011.
 
@@ -220,25 +240,30 @@ Avant toute installation : `scripts/etat_vps.sh` doit rendre un feu vert (≥ 15
 
 | Signal | Où | Alerte Telegram |
 |--------|-----|-----------------|
-| Chaque appel HTTP (URL, statut, durée, taille) | `raw.document` et journal | — |
-| Couverture de collecte | Page « santé de la collecte », requête sur `raw.tache_collecte` | Couverture du jour < 98 % |
-| Refus de la source (403, 429) | Journal | Immédiate, la collecte s'arrête |
-| Champ attendu absent d'une réponse | Journal d'ingestion | Immédiate |
-| Disque | Tâche nocturne | Occupation ≥ 80 % |
-| Sauvegarde | Tâche nocturne | En cas d'échec |
-| Collecteur silencieux | Tâche de surveillance | Aucun document depuis 30 minutes pendant les heures de course |
+| Chaque appel HTTP (adresse, statut, durée, taille, cache) | `_documents.jsonl` du jour | — |
+| Chaque tâche terminée | `_taches.jsonl` du jour, journal du conteneur | — |
+| Couverture de collecte | `turf couverture`, puis page « santé de la collecte » | Bilan chaque jour à 10 h ; signalé s'il est sous 98 % |
+| Refus de la source (403, 429) | Journal, `etat/source-refusee.json` | Immédiate ; la collecte se suspend une heure |
+| Source injoignable | Journal | Après 5 requêtes sans réponse ; message au rétablissement |
+| Programme illisible | Journal | Immédiate, puis toutes les 6 heures |
+| Collecteur muet | `etat/battement.json`, lu par la surveillance | Aucun battement depuis 10 minutes |
+| Disque | Surveillance, chaque minute | Occupation ≥ 80 % |
+| Sauvegarde | Surveillance, chaque nuit | En cas d'échec, ou si elle n'est pas configurée |
+| Champ attendu absent d'une réponse | Journal d'ingestion (sprint 2) | Immédiate |
 
-Aucun traitement ne s'arrête en silence : une erreur est journalisée avec son contexte, puis propagée ou transformée en alerte.
+Aucun traitement ne s'arrête en silence : une erreur est journalisée avec son contexte, puis propagée ou transformée en alerte. Une même alerte n'est pas répétée avant une heure au moins.
+
+La conduite à tenir pour chaque alerte est dans [EXPLOITATION.md](./EXPLOITATION.md).
 
 ---
 
 ## 11. Sauvegarde et reprise
 
-- **Chaque nuit** : `pg_dump` de la base et synchronisation de `data/raw/` vers le stockage S3.
+- **Chaque nuit** à 3 h 30 : copie de `data/raw/` vers le stockage S3, par rclone. La copie n'efface jamais rien à distance. Le `pg_dump` de la base s'y ajoutera au sprint 2.
 - **Perte de la base** : restaurer le dernier `pg_dump`, ou rejouer l'ingestion depuis les fichiers bruts.
-- **Perte du VPS** : réinstaller, restaurer `data/raw/` et la base depuis S3. La seule perte définitive est celle des instantanés avant course non collectés pendant la panne.
+- **Perte du VPS** : réinstaller, restaurer `data/raw/` depuis S3. La perte définitive se limite aux instantanés avant course non collectés pendant la panne et à ceux pris depuis la dernière sauvegarde.
 
-Les procédures détaillées (déploiement, retour arrière, restauration) sont livrées au sprint 1 dans `PLAN-DEPLOIEMENT.md` et `EXPLOITATION.md`.
+Les procédures détaillées sont dans [PLAN-DEPLOIEMENT.md](./PLAN-DEPLOIEMENT.md) (installation, mise à jour, retour arrière) et [EXPLOITATION.md](./EXPLOITATION.md) (alertes, restauration).
 
 ---
 

@@ -1,0 +1,47 @@
+# Production — VPS partagé avec la production d'autres projets.
+#
+#   - aucun port publié : les deux services ne font que des appels sortants ;
+#   - mémoire et CPU plafonnés sur chaque service ;
+#   - tout l'état est dans ../data, monté sur /data.
+#
+# Lancement, depuis la racine du projet :
+#   docker compose -f docker/docker-compose.prod.yml up -d --build
+#
+# Procédure complète : docs/PLAN-DEPLOIEMENT.md
+
+name: ilomad-turf
+
+x-service: &service
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile
+  image: ilomad-turf:local
+  env_file: ../.env
+  environment:
+    TURF_DONNEES: /data
+  volumes:
+    - ../data:/data
+  restart: unless-stopped
+  # Le collecteur termine la tâche en cours avant de s'arrêter (quelques secondes).
+  stop_grace_period: 30s
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  # Suit le programme du jour et prend les instantanés, à 1 requête par seconde au plus.
+  collecteur:
+    <<: *service
+    command: ["turf", "collect"]
+    mem_limit: 192m
+    cpus: 0.25
+
+  # Veille sur le collecteur et le disque, lance la sauvegarde nocturne.
+  # Séparé du collecteur : un collecteur planté ne peut pas s'alerter lui-même.
+  surveillance:
+    <<: *service
+    command: ["turf", "surveiller"]
+    mem_limit: 256m
+    cpus: 0.25

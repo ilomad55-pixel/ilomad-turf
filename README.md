@@ -2,7 +2,7 @@
 
 > Application personnelle qui calcule des probabilités calibrées pour les courses de trot et les mesure contre la cote PMU. Python, PostgreSQL, Streamlit.
 
-**Statut** : sprint 0 (cadrage et vérification de la source) — version 0.1.0
+**Statut** : sprint 1 (collecte brute) — version 0.2.0
 **Usage** : strictement personnel. Aucune donnée PMU ne doit sortir de l'application.
 
 ---
@@ -20,6 +20,8 @@ Pour y répondre honnêtement, l'application :
 
 Le verdict (go/no-go) est rendu à la fin du sprint 4, sur 12 mois de courses que le modèle n'a jamais vues.
 
+**Où en est-on.** L'étape 1 est écrite : le collecteur suit le programme du jour et stocke chaque réponse de la source telle quelle. Les étapes 2 à 4 viennent aux sprints suivants.
+
 ---
 
 ## Où lire quoi
@@ -31,55 +33,74 @@ Le verdict (go/no-go) est rendu à la fin du sprint 4, sur 12 mois de courses qu
 | Suivre le calendrier et les sprints | [docs/PLAN-REALISATION.md](./docs/PLAN-REALISATION.md) |
 | Comprendre les choix techniques | [docs/ARCHITECTURE-TECHNIQUE.md](./docs/ARCHITECTURE-TECHNIQUE.md) et [docs/adr/](./docs/adr/) |
 | Travailler avec l'API du PMU | [docs/SPEC-SOURCE-PMU.md](./docs/SPEC-SOURCE-PMU.md) |
+| **Installer ou mettre à jour en production** | [docs/PLAN-DEPLOIEMENT.md](./docs/PLAN-DEPLOIEMENT.md) |
+| **Réagir à une alerte** | [docs/EXPLOITATION.md](./docs/EXPLOITATION.md) |
 | Relire le raisonnement d'origine | [docs/analyse/ILOMAD-TURF.txt](./docs/analyse/ILOMAD-TURF.txt) |
 
 ---
 
 ## Stack
 
-| Couche | Choix |
-|--------|-------|
-| Langage | Python 3.13, gestion des dépendances avec `uv` |
-| Base de données | PostgreSQL 17 (Docker) |
-| Modèles | scikit-learn, LightGBM, statsmodels |
-| Interface | Streamlit |
-| Déploiement | Docker Compose sur VPS, accès par tunnel SSH |
-
-Les dépendances sont ajoutées sprint par sprint. Le sprint 0 n'utilise que la bibliothèque standard de Python.
+| Couche | Choix | En place |
+|--------|-------|----------|
+| Langage | Python 3.13, dépendances verrouillées par `uv` | Oui |
+| Collecte | httpx, fichiers bruts compressés sur disque | Oui |
+| Alertes et sauvegarde | Telegram, rclone vers un stockage S3 | Oui |
+| Déploiement | Docker Compose sur VPS | Oui |
+| Base de données | PostgreSQL 17 | Sprint 2 |
+| Modèles | scikit-learn, LightGBM, statsmodels | Sprint 4 |
+| Interface | Streamlit | Sprint 3 |
 
 ---
 
 ## Prérequis
 
-| Outil | Version | Vérification | Nécessaire à partir de |
-|-------|---------|--------------|------------------------|
-| Python | 3.13 | `python --version` | Sprint 0 |
-| Git | 2.x | `git --version` | Sprint 0 |
-| uv | récente | `uv --version` | Sprint 1 |
-| Docker Desktop | 4.x | `docker --version` | Sprint 1 |
+| Outil | Version | Vérification | Pour quoi |
+|-------|---------|--------------|-----------|
+| Python | 3.13 | `python --version` | Tout |
+| Git | 2.x | `git --version` | Tout |
+| Docker | avec Compose v2 | `docker compose version` | Production uniquement |
+
+`uv` n'est pas nécessaire sur le poste : il est installé dans l'environnement virtuel du projet.
 
 ---
 
-## Installation
+## Installation (poste de développement)
 
 ```powershell
 git clone https://github.com/ilomad55-pixel/ilomad-turf.git
 cd ilomad-turf
 
-# Environnement de développement (tests et lint)
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install "pytest>=8" "ruff>=0.6"
+.\.venv\Scripts\python.exe -m pip install -e . "pytest>=8" "ruff>=0.6" uv
 ```
 
-Dès que `uv` est installé, la commande unique `uv sync` remplace les deux dernières lignes.
-
-Aucun fichier `.env` n'est nécessaire pour le sprint 0 : toutes les variables ont une valeur par défaut. Elles sont décrites dans [.env.example](./.env.example).
+Aucun fichier `.env` n'est nécessaire en local : toutes les variables ont une valeur par défaut, et sans Telegram les alertes vont dans les journaux. Les variables sont décrites dans [.env.example](./.env.example).
 
 ---
 
 ## Commandes
 
 Toutes les commandes se lancent depuis la racine du projet.
+
+### Collecte
+
+```powershell
+# Créneaux prévus aujourd'hui, sans rien enregistrer
+.\.venv\Scripts\turf.exe collect --dry-run
+
+# Essai réel de 30 minutes : les fichiers arrivent dans data\raw\AAAA\MM\JJ\
+.\.venv\Scripts\turf.exe collect --duree-min 30
+
+# Bilan du jour : instantanés prévus, pris, manqués
+.\.venv\Scripts\turf.exe couverture
+.\.venv\Scripts\turf.exe couverture --date 2026-10-12
+
+# Vérifier la configuration Telegram
+.\.venv\Scripts\turf.exe alerte-test
+```
+
+**Un seul collecteur à la fois**, toutes machines confondues : le plafond d'une requête par seconde vers le PMU vaut pour l'ensemble du projet. Ne pas lancer d'essai local pendant que la production collecte.
 
 ### Tests et qualité
 
@@ -89,39 +110,35 @@ Toutes les commandes se lancent depuis la racine du projet.
 .\.venv\Scripts\python.exe -m ruff format --check .
 ```
 
-### Spike de la source PMU
+Les tests rejouent une journée complète de collecte avec une source et une horloge simulées : ils ne font aucun appel réseau.
 
-Vérifie le comportement réel de l'API et écrit `docs/spike/rapport-spike-source-pmu.json`.
+### Après avoir modifié les dépendances
 
 ```powershell
-# Tout (environ 45 minutes la première fois, à 1 requête par seconde)
+.\.venv\Scripts\uv.exe lock
+```
+
+`uv.lock` doit être committé : l'image Docker s'installe à partir de lui.
+
+### Production
+
+```bash
+# Sur le VPS, dans /opt/ilomad-turf
+docker compose -f docker/docker-compose.prod.yml up -d --build
+docker compose -f docker/docker-compose.prod.yml logs --tail=50 -f collecteur
+```
+
+Procédure complète : [docs/PLAN-DEPLOIEMENT.md](./docs/PLAN-DEPLOIEMENT.md).
+
+### Outils du sprint 0
+
+```powershell
+# Vérification de la source PMU (tout est en cache : quelques secondes)
 python scripts\spike_source_pmu.py
 
-# Une seule étape
-python scripts\spike_source_pmu.py --etapes echantillon
-python scripts\spike_source_pmu.py --etapes comptage --debut 2021-10-01 --fin 2026-09-30
-```
-
-Les réponses sont mises en cache dans `data/spike-cache/` : relancer le script ne refait aucun appel déjà réussi et se termine en quelques secondes.
-
-### État du VPS
-
-Contrôle en lecture seule : disque, mémoire, Docker, ports. Rend un feu vert ou un feu rouge.
-
-```powershell
+# Contrôle du VPS avant installation, en lecture seule
 cmd /c "ssh root@<hote-du-vps> bash -s < scripts\etat_vps.sh"
 ```
-
----
-
-## Variables d'environnement
-
-| Variable | Description | Défaut |
-|----------|-------------|--------|
-| `TURF_PMU_URL_BASE` | Racine de l'API turfinfo | `https://online.turfinfo.api.pmu.fr/rest/client/7` |
-| `TURF_PMU_INTERVALLE_S` | Intervalle minimal entre deux requêtes, en secondes (plancher : 1.0) | `1.0` |
-| `TURF_PMU_USER_AGENT` | En-tête `User-Agent` envoyé à la source | `ilomad-turf-spike/0.1 (usage personnel, faible debit)` |
-| `TURF_SPIKE_CACHE` | Dossier de cache du spike | `data/spike-cache` |
 
 ---
 
@@ -129,40 +146,57 @@ cmd /c "ssh root@<hote-du-vps> bash -s < scripts\etat_vps.sh"
 
 ```
 ilomad-turf/
-├── README.md  CHANGELOG.md  .env.example  pyproject.toml
+├── README.md  CHANGELOG.md  .env.example  pyproject.toml  uv.lock
+├── docker/
+│   ├── Dockerfile                image unique, une commande par service
+│   └── docker-compose.prod.yml   collecteur et surveillance
 ├── docs/
 │   ├── BRIEF.md  CAHIER-DES-CHARGES.md  PLAN-REALISATION.md
 │   ├── ARCHITECTURE-TECHNIQUE.md  SPEC-SOURCE-PMU.md
-│   ├── adr/           décisions d'architecture, une par fichier
-│   ├── analyse/       analyse initiale du projet
-│   └── spike/         rapport chiffré du spike
-├── scripts/
-│   ├── spike_source_pmu.py   vérification de la source (sprint 0)
-│   └── etat_vps.sh           contrôle du VPS avant installation
-├── src/turf/          code de l'application (à partir du sprint 1)
-├── tests/
-└── data/              cache, fichiers bruts, modèles — jamais dans Git
+│   ├── PLAN-DEPLOIEMENT.md  EXPLOITATION.md
+│   ├── adr/                      décisions d'architecture, une par fichier
+│   ├── analyse/                  analyse initiale du projet
+│   └── spike/                    rapport chiffré du spike
+├── scripts/                      outils du sprint 0
+├── src/turf/
+│   ├── cli.py                    commandes : collect, couverture, surveiller, alerte-test
+│   ├── config.py                 toute la configuration, lue dans l'environnement
+│   ├── alertes.py                Telegram
+│   ├── surveillance.py           collecteur muet, disque, sauvegarde nocturne
+│   └── collecte/
+│       ├── client_pmu.py         débit plafonné, reprises, arrêt sur refus
+│       ├── planificateur.py      du programme aux tâches (fonctions pures)
+│       ├── collecteur.py         la boucle
+│       ├── stockage_brut.py      fichiers bruts et journaux
+│       └── couverture.py         bilan quotidien
+├── tests/                        dont fixtures/ : extraits réels de réponses
+└── data/                         fichiers bruts, état, cache — jamais dans Git
 ```
 
 ---
 
 ## Règles à ne pas enfreindre
 
-1. **1 requête par seconde au maximum** vers le PMU. Le code impose ce plancher.
-2. **Aucune redistribution** de données PMU, sous aucune forme.
-3. **Aucune mise réelle** tant que le go/no-go n'est pas passé.
-4. **Jamais de donnée d'après course dans un modèle.** Les champs autorisés sont dans une liste blanche.
-5. **Le VPS est partagé avec la production de clients** : ne rien modifier hors de `/opt/ilomad-turf/`.
+1. **1 requête par seconde au maximum** vers le PMU, et **un seul collecteur** en marche. Le code impose le plancher ; il ne peut pas empêcher deux lancements.
+2. **Si la source refuse, on s'arrête.** On ne contourne pas un refus, on ne maquille pas l'en-tête `User-Agent`.
+3. **Aucune redistribution** de données PMU, sous aucune forme.
+4. **Aucune mise réelle** tant que le go/no-go n'est pas passé.
+5. **Jamais de donnée d'après course dans un modèle.** Les champs autorisés sont dans une liste blanche.
+6. **Le VPS est partagé avec la production de clients** : ne rien modifier hors de `/opt/ilomad-turf/`.
+7. **Ne rien supprimer dans `data/raw/`** : les cotes avant course ne se recollectent pas.
 
 ---
 
 ## Si quelque chose ne va pas
 
-| Symptôme | Cause probable | Action |
-|----------|----------------|--------|
-| Le spike s'arrête sur `ARRÊT : 3 refus consécutifs` | La source refuse les requêtes (403 ou 429) | Ne pas relancer en boucle. Attendre plusieurs heures, vérifier l'URL dans un navigateur, consulter [SPEC-SOURCE-PMU.md](./docs/SPEC-SOURCE-PMU.md) |
-| Le spike signale des `anomalies` dans son rapport | Une réponse a une forme inattendue | Lire la liste dans le rapport JSON : c'est souvent un champ ajouté ou retiré par le PMU |
-| `etat_vps.sh` rend un feu rouge | Disque, mémoire ou port insuffisant | Libérer la ressource ou prévoir un VPS dédié (voir [ADR 0003](./docs/adr/0003-vps-partage-entrainement-local.md)) |
+| Situation | Où regarder |
+|-----------|-------------|
+| Une alerte Telegram est arrivée | [docs/EXPLOITATION.md § 4](./docs/EXPLOITATION.md#4-que-faire-quand-une-alerte-arrive) |
+| La construction de l'image Docker échoue | [docs/PLAN-DEPLOIEMENT.md § 9](./docs/PLAN-DEPLOIEMENT.md#9-si-la-construction-de-limage-échoue) |
+| Une mise à jour a cassé la collecte | [docs/PLAN-DEPLOIEMENT.md § 7](./docs/PLAN-DEPLOIEMENT.md#7-retour-arrière) |
+| Le serveur est perdu | [docs/EXPLOITATION.md § 5](./docs/EXPLOITATION.md#5-restaurer-après-la-perte-du-vps) |
+| `Dossier des données brutes non inscriptible` au démarrage | Sur le VPS : `chown -R 10001:10001 data` |
+| `Configuration invalide : …` au démarrage | Corriger la variable nommée dans `.env`, d'après [.env.example](./.env.example) |
 
 ---
 
