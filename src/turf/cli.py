@@ -5,6 +5,7 @@ turf collect --dry-run          créneaux prévus pour un jour, sans rien enregi
 turf couverture                 bilan de collecte d'un jour
 turf surveiller                 surveillance et sauvegarde (service)
 turf alerte-test                vérifie la configuration Telegram
+turf backfill                   demande, suit ou retire une reprise d'historique
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import typer
 from turf import __version__
 from turf.alertes import Alerteur
 from turf.collecte import couverture as mesure
+from turf.collecte import reprise
 from turf.collecte.client_pmu import ClientPmu
 from turf.collecte.collecteur import Collecteur
 from turf.collecte.planificateur import demandes, lire_programme, planifier
@@ -204,3 +206,89 @@ def alerte_test() -> None:
         typer.echo("Échec de l'envoi : voir le journal ci-dessus.")
         raise typer.Exit(1)
     typer.echo("Message envoyé.")
+
+
+@app.command()
+def backfill(
+    debut: Annotated[
+        str | None, typer.Option("--debut", help="Premier jour à reprendre, AAAA-MM-JJ.")
+    ] = None,
+    fin: Annotated[
+        str | None, typer.Option("--fin", help="Dernier jour à reprendre, AAAA-MM-JJ.")
+    ] = None,
+    perimetre: Annotated[
+        str, typer.Option("--perimetre", help="Courses à reprendre : trot-france, trot ou tout.")
+    ] = "trot-france",
+    ordre: Annotated[
+        str,
+        typer.Option("--ordre", help="recent : du plus récent au plus ancien. ancien : l'inverse."),
+    ] = "recent",
+    etat: Annotated[
+        bool, typer.Option("--etat", help="Affiche la progression, sans rien changer.")
+    ] = False,
+    arreter: Annotated[
+        bool, typer.Option("--arreter", help="Retire la demande. Ce qui est rapatrié reste.")
+    ] = False,
+) -> None:
+    """Demande au collecteur de rapatrier des jours passés (reprise d'historique).
+
+    Cette commande n'interroge pas la source : elle dépose une demande, que le
+    collecteur en marche exécute en tâche de fond, sans dépasser son débit.
+    """
+    parametres = _parametres()
+    horloge = Horloge()
+    en_cours = reprise.lire_demande(parametres)
+
+    if etat:
+        _afficher_reprise(parametres, en_cours)
+        return
+    if arreter:
+        (parametres.dossier_etat / reprise.FICHIER_REPRISE).unlink(missing_ok=True)
+        typer.echo(
+            "Demande de reprise retirée. Les jours déjà rapatriés restent dans data/raw."
+            if en_cours
+            else "Aucune reprise n'était demandée."
+        )
+        return
+    if debut is None or fin is None:
+        raise typer.BadParameter("--debut et --fin sont nécessaires (ou --etat, ou --arreter)")
+
+    try:
+        demande = reprise.nouvelle_demande(
+            _jour(debut, horloge), _jour(fin, horloge), perimetre, ordre, horloge.maintenant()
+        )
+    except reprise.DemandeInvalide as e:
+        raise typer.BadParameter(str(e)) from e
+    if en_cours and not en_cours.get("terminee_le"):
+        typer.echo(
+            f"Remplace la reprise en cours ({en_cours['jours_faits']} jours parcourus). "
+            "Les jours déjà rapatriés ne seront pas redemandés."
+        )
+    reprise.ecrire_demande(parametres, demande)
+    _afficher_reprise(parametres, demande)
+    typer.echo("Le collecteur en marche la prend en compte dans la minute.")
+
+
+def _afficher_reprise(parametres: Parametres, demande: dict | None) -> None:
+    if demande is None:
+        typer.echo("Aucune reprise d'historique demandée.")
+        return
+    total = reprise.jours_total(demande)
+    plage = parametres.reprise_plage
+    horaire = (
+        "à toute heure"
+        if plage is None
+        else f"de {plage[0][0]:02d}:{plage[0][1]:02d} à {plage[1][0]:02d}:{plage[1][1]:02d} (Paris)"
+    )
+    typer.echo(
+        f"Reprise {demande['perimetre']}, du {demande['debut']} au {demande['fin']}, "
+        f"ordre {demande['ordre']}, active {horaire}."
+    )
+    typer.echo(
+        f"Progression : {demande['jours_faits']}/{total} jours, "
+        f"dont {demande['jours_incomplets']} incomplets ; {demande['requetes']} requêtes."
+    )
+    if demande.get("terminee_le"):
+        typer.echo(f"Terminée le {demande['terminee_le']}.")
+    else:
+        typer.echo(f"Prochain jour : {demande['prochain_jour']}.")

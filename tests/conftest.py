@@ -61,6 +61,8 @@ class SourcePmuSimulee:
         self.pannes_restantes = 0
         self.annulees: set[str] = set()
         self.reports: dict[str, timedelta] = {}
+        # Jours anciens pour lesquels la source a un programme (reprise d'historique).
+        self.jours_passes: set[date] = set()
 
     # ---------------------------------------------------------------- réponses
 
@@ -116,6 +118,9 @@ class SourcePmuSimulee:
         return self.refuser_jusqu_a is None or maintenant < self.refuser_jusqu_a
 
     def _programme(self, code: str, maintenant: datetime) -> httpx.Response:
+        if datetime.strptime(code, "%d%m%Y").date() in self.jours_passes:
+            # Un jour ancien, tel que la source le garde : toutes les courses arrivées.
+            return httpx.Response(200, json=self.programme)
         if code != f"{JOUR:%d%m%Y}":
             return httpx.Response(204)
         if "programme" not in self.programme:

@@ -349,7 +349,9 @@ Par course : `participants`, `combinaisons` et `rapports-definitifs` sur deux ma
 
 Le plan prévoyait 10 à 14 nuits. C'est tenu pour le trot ; il en faut 23 pour tout reprendre, parce que les deux masses doublent une partie des appels.
 
-Ordre recommandé : trot en France d'abord (9 nuits, c'est ce dont le sprint 4 a besoin), puis le reste en tâche de fond. Les 1 826 programmes déjà téléchargés par le spike sont dans `data/spike-cache/` et peuvent être repris tels quels.
+Ordre recommandé : trot en France d'abord (9 nuits, c'est ce dont le sprint 4 a besoin), puis le reste en tâche de fond.
+
+La reprise est exécutée par le collecteur lui-même, pour que le plafond d'une requête par seconde vaille pour le direct et la reprise réunis ([ADR 0006](./adr/0006-reprise-executee-par-le-collecteur.md)). Elle se lance par `turf backfill` ; voir [EXPLOITATION.md § 5](./EXPLOITATION.md#5-reprise-dhistorique).
 
 ### 7.5 Disque
 

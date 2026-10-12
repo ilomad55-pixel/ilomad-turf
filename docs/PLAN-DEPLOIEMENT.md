@@ -130,6 +130,15 @@ Puis dérouler la checklist du § 8.
 
 **Premier jour.** Un démarrage en cours de journée marque comme manqués tous les créneaux déjà passés. Le premier bilan quotidien sera donc sous le seuil : c'est attendu. La couverture se juge à partir du premier jour complet.
 
+**Reprise d'historique.** Une fois le collecteur en marche et vérifié, lancer le rapatriement des cinq ans de trot. Il dure 9 nuits : chaque jour de retard décale d'autant le go/no-go.
+
+```bash
+docker compose -f docker/docker-compose.prod.yml exec collecteur \
+  turf backfill --debut 2021-10-01 --fin 2026-09-30 --perimetre trot-france
+```
+
+Suivi, arrêt et réglages : [EXPLOITATION.md § 5](./EXPLOITATION.md#5-reprise-dhistorique).
+
 ---
 
 ## 6. Mise à jour

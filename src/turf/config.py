@@ -37,6 +37,26 @@ def _nombre(nom: str, valeur: str, conversion: type) -> float | int:
         raise ConfigurationInvalide(f"{nom} : nombre attendu, reçu « {valeur} »") from e
 
 
+def _heure(nom: str, valeur: str) -> tuple[int, int]:
+    try:
+        heures, minutes = (int(x) for x in valeur.split(":"))
+        if not (0 <= heures < 24 and 0 <= minutes < 60):
+            raise ValueError
+    except ValueError as e:
+        raise ConfigurationInvalide(f"{nom} : heure HH:MM attendue, reçu « {valeur} »") from e
+    return heures, minutes
+
+
+def _plage(nom: str, valeur: str) -> tuple[tuple[int, int], tuple[int, int]] | None:
+    """Plage horaire « HH:MM-HH:MM ». Une valeur vide signifie « sans restriction »."""
+    if not valeur.strip():
+        return None
+    debut, separateur, fin = valeur.partition("-")
+    if not separateur:
+        raise ConfigurationInvalide(f"{nom} : plage HH:MM-HH:MM attendue, reçu « {valeur} »")
+    return _heure(nom, debut.strip()), _heure(nom, fin.strip())
+
+
 @dataclass(frozen=True)
 class Parametres:
     dossier_donnees: Path
@@ -52,6 +72,8 @@ class Parametres:
     suivi_min: tuple[int, ...]
     recharge_programme_s: int
     couverture_seuil: float
+    # Plage horaire (Paris) de la reprise d'historique ; None : à toute heure.
+    reprise_plage: tuple[tuple[int, int], tuple[int, int]] | None
 
     telegram_url_base: str
     telegram_jeton: str | None
@@ -81,14 +103,7 @@ class Parametres:
             return env.get(nom, "").strip() or None
 
         heure = lire("TURF_SAUVEGARDE_HEURE", "03:30")
-        try:
-            heures, minutes = (int(x) for x in heure.split(":"))
-            if not (0 <= heures < 24 and 0 <= minutes < 60):
-                raise ValueError
-        except ValueError as e:
-            raise ConfigurationInvalide(
-                f"TURF_SAUVEGARDE_HEURE : format HH:MM attendu, reçu « {heure} »"
-            ) from e
+        _heure("TURF_SAUVEGARDE_HEURE", heure)
 
         return cls(
             dossier_donnees=Path(lire("TURF_DONNEES", "data")),
@@ -120,6 +135,10 @@ class Parametres:
             ),
             couverture_seuil=_nombre(
                 "TURF_COUVERTURE_SEUIL", lire("TURF_COUVERTURE_SEUIL", "0.98"), float
+            ),
+            # Vide = à toute heure : comme pour le suivi, une valeur vide est un choix.
+            reprise_plage=_plage(
+                "TURF_REPRISE_PLAGE", env.get("TURF_REPRISE_PLAGE", "00:00-08:00")
             ),
             telegram_url_base=lire("TURF_TELEGRAM_URL_BASE", "https://api.telegram.org").rstrip(
                 "/"

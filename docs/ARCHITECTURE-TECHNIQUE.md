@@ -1,7 +1,7 @@
 # Architecture technique — ILOMAD-TURF
 
-> **Version** : 1.1 | **Date** : 12/10/2026 | **Auteur** : Olivier MORA avec Claude Code
-> **Depuis la version 1.0** : le collecteur ne dépend plus de la base ([ADR 0005](./adr/0005-collecteur-ne-depend-que-du-disque.md)) ; un service de surveillance est ajouté.
+> **Version** : 1.2 | **Date** : 13/10/2026 | **Auteur** : Olivier MORA avec Claude Code
+> **Depuis la version 1.0** : le collecteur ne dépend plus de la base ([ADR 0005](./adr/0005-collecteur-ne-depend-que-du-disque.md)) ; un service de surveillance est ajouté ; la reprise d'historique est exécutée par le collecteur ([ADR 0006](./adr/0006-reprise-executee-par-le-collecteur.md)).
 > **En production au sprint 1** : collecteur, surveillance, fichiers bruts, sauvegarde. Le reste est la cible des sprints suivants.
 
 Ce document décrit **comment** l'application est construite. Les exigences sont dans le [cahier des charges](./CAHIER-DES-CHARGES.md), le comportement de la source dans [SPEC-SOURCE-PMU.md](./SPEC-SOURCE-PMU.md), le « pourquoi » de chaque choix dans [adr/](./adr/).
@@ -131,6 +131,8 @@ Soit environ 1 450 requêtes et 4 Mo compressés par jour pour 51 courses en moy
 **Reprise après arrêt.** Les tâches se recalculent à partir du programme. Chaque tâche terminée est une ligne du journal `_taches.jsonl` du jour. Au redémarrage, le collecteur relit ce journal et saute ce qui est déjà consigné. Un créneau avant course dont l'heure est passée est marqué « manqué » : il ne se rattrape pas.
 
 **Clôture.** Le lendemain à 10 h, le collecteur recharge une dernière fois le programme, récupère les arrivées qui manquent, écrit le bilan du jour et l'envoie sur Telegram.
+
+**Reprise d'historique.** Le rapatriement des jours passés n'est pas un programme à part : le collecteur l'exécute lui-même, une requête à la fois, quand rien n'est dû en direct ([ADR 0006](./adr/0006-reprise-executee-par-le-collecteur.md)). Le plafond d'une requête par seconde reste ainsi global. La reprise se commande par `turf backfill`, qui dépose un fichier de demande ; elle travaille de minuit à 8 h par défaut, et produit des fichiers de même forme que le direct.
 
 ---
 

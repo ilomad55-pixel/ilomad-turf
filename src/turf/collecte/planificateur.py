@@ -27,6 +27,7 @@ MATIN = "matin"
 AVANT = "avant"
 SUIVI = "suivi"
 ARRIVEE = "arrivee"
+REPRISE = "reprise"
 
 # L'instantané du matin part à 8 h, ou deux heures avant une course matinale.
 HEURE_MATIN = 8
@@ -68,6 +69,10 @@ class Course:
     @property
     def a_partir(self) -> bool:
         return self.categorie_statut in (STATUT_A_PARTIR, None)
+
+    @property
+    def trot(self) -> bool:
+        return (self.specialite or "").startswith("TROT")
 
 
 @dataclass(frozen=True)
@@ -156,6 +161,13 @@ def tache_arrivee(course: Course, echeance: datetime) -> Tache:
     )
 
 
+def tache_reprise(course: Course) -> Tache:
+    """Rapatriement d'une course passée : tout ce que la source en garde, en une fois."""
+    return Tache(
+        course.date_programme, course.reunion, course.numero, REPRISE, REPRISE, course.depart, None
+    )
+
+
 def demandes(tache: Tache) -> list[Demande]:
     """Requêtes à faire pour une tâche, dans l'ordre."""
 
@@ -166,6 +178,10 @@ def demandes(tache: Tache) -> list[Demande]:
         # Le matin, aucune cote n'est ouverte : une seule masse suffit pour les partants.
         return [demande(PARTICIPANTS, "OFFLINE"), demande(PERFORMANCES)]
     ressources = [PARTICIPANTS, COMBINAISONS]
-    if tache.famille == ARRIVEE:
+    if tache.famille in (ARRIVEE, REPRISE):
         ressources.append(RAPPORTS_DEFINITIFS)
-    return [demande(ressource, masse) for ressource in ressources for masse in MASSES]
+    requetes = [demande(ressource, masse) for ressource in ressources for masse in MASSES]
+    if tache.famille == REPRISE:
+        # En direct, les performances sont prises le matin ; ici, la course est déjà courue.
+        requetes.append(demande(PERFORMANCES))
+    return requetes

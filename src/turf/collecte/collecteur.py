@@ -32,6 +32,7 @@ from turf.collecte.planificateur import (
     planifier,
     tache_arrivee,
 )
+from turf.collecte.reprise import Reprise
 from turf.collecte.ressources import PARTICIPANTS, PROGRAMME, Demande
 from turf.collecte.stockage_brut import JOURNAL_TACHES, StockageBrut
 from turf.config import Parametres
@@ -113,6 +114,7 @@ class Collecteur:
         self._pannes_reseau = 0
         self._dernier_battement: datetime | None = None
         self._verrou_jusqu_a = self._lire_verrou()
+        self.reprise = Reprise(parametres, client, stockage, alerteur, horloge)
 
     # ------------------------------------------------------------------ boucle
 
@@ -181,6 +183,15 @@ class Collecteur:
         for journee in list(self.journees.values()):
             if journee.cloture_lancee and not journee.en_attente:
                 self._cloturer(journee, maintenant)
+
+        # La reprise d'historique passe en dernier : elle ne prend que le temps laissé
+        # libre, une requête à la fois, et le direct reprend la main dès le tour suivant.
+        try:
+            if self.reprise.pas(maintenant):
+                return 0.0
+        except SourceRefusee as e:
+            self._verrouiller(maintenant, str(e))
+            return 0.0
         return self._attente(maintenant)
 
     def _attente(self, maintenant: datetime) -> float:
@@ -451,8 +462,17 @@ class Collecteur:
             if sous_le_seuil
             else "Bilan quotidien. "
         )
+        reprise = self.reprise.resume()
+        suite = ""
+        if reprise and not reprise["terminee_le"]:
+            suite = (
+                f" Reprise d'historique ({reprise['perimetre']}) : {reprise['jours_faits']}/"
+                f"{reprise['jours_total']} jours, prochain : {reprise['prochain_jour']}."
+            )
         self.alerteur.envoyer(
-            f"bilan-{journee.date_programme.isoformat()}", entete + bilan.resume(), silence_min=0
+            f"bilan-{journee.date_programme.isoformat()}",
+            entete + bilan.resume() + suite,
+            silence_min=0,
         )
         del self.journees[journee.date_programme]
         self._closes.add(journee.date_programme)
@@ -556,6 +576,7 @@ class Collecteur:
                     if self._verrou_jusqu_a
                     else None
                 ),
+                "reprise": self.reprise.resume(),
             },
         )
 

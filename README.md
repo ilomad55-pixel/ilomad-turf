@@ -98,6 +98,12 @@ Toutes les commandes se lancent depuis la racine du projet.
 
 # Vérifier la configuration Telegram
 .\.venv\Scripts\turf.exe alerte-test
+
+# Reprise d'historique : déposer une demande, la suivre, la retirer.
+# C'est le collecteur en marche qui l'exécute ; la commande n'interroge pas la source.
+.\.venv\Scripts\turf.exe backfill --debut 2021-10-01 --fin 2026-09-30 --perimetre trot-france
+.\.venv\Scripts\turf.exe backfill --etat
+.\.venv\Scripts\turf.exe backfill --arreter
 ```
 
 **Un seul collecteur à la fois**, toutes machines confondues : le plafond d'une requête par seconde vers le PMU vaut pour l'ensemble du projet. Ne pas lancer d'essai local pendant que la production collecte.
@@ -159,7 +165,7 @@ ilomad-turf/
 │   └── spike/                    rapport chiffré du spike
 ├── scripts/                      outils du sprint 0
 ├── src/turf/
-│   ├── cli.py                    commandes : collect, couverture, surveiller, alerte-test
+│   ├── cli.py                    commandes : collect, couverture, backfill, surveiller, alerte-test
 │   ├── config.py                 toute la configuration, lue dans l'environnement
 │   ├── alertes.py                Telegram
 │   ├── surveillance.py           collecteur muet, disque, sauvegarde nocturne
@@ -167,6 +173,7 @@ ilomad-turf/
 │       ├── client_pmu.py         débit plafonné, reprises, arrêt sur refus
 │       ├── planificateur.py      du programme aux tâches (fonctions pures)
 │       ├── collecteur.py         la boucle
+│       ├── reprise.py            reprise d'historique, en tâche de fond du collecteur
 │       ├── stockage_brut.py      fichiers bruts et journaux
 │       └── couverture.py         bilan quotidien
 ├── tests/                        dont fixtures/ : extraits réels de réponses
@@ -194,7 +201,7 @@ ilomad-turf/
 | Une alerte Telegram est arrivée | [docs/EXPLOITATION.md § 4](./docs/EXPLOITATION.md#4-que-faire-quand-une-alerte-arrive) |
 | La construction de l'image Docker échoue | [docs/PLAN-DEPLOIEMENT.md § 9](./docs/PLAN-DEPLOIEMENT.md#9-si-la-construction-de-limage-échoue) |
 | Une mise à jour a cassé la collecte | [docs/PLAN-DEPLOIEMENT.md § 7](./docs/PLAN-DEPLOIEMENT.md#7-retour-arrière) |
-| Le serveur est perdu | [docs/EXPLOITATION.md § 5](./docs/EXPLOITATION.md#5-restaurer-après-la-perte-du-vps) |
+| Le serveur est perdu | [docs/EXPLOITATION.md § 6](./docs/EXPLOITATION.md#6-restaurer-après-la-perte-du-vps) |
 | `Dossier des données brutes non inscriptible` au démarrage | Sur le VPS : `chown -R 10001:10001 data` |
 | `Configuration invalide : …` au démarrage | Corriger la variable nommée dans `.env`, d'après [.env.example](./.env.example) |
 

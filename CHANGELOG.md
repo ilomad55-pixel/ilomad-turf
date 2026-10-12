@@ -5,6 +5,13 @@
 
 ## [Non publié]
 
+### Ajouté — sprint 2, reprise d'historique
+
+- Ajouter la reprise d'historique, exécutée par le collecteur en tâche de fond : une requête à la fois quand rien n'est dû en direct, plage horaire réglable, reprise après arrêt, périmètres `trot-france`, `trot` et `tout` enchaînables sans rien redemander.
+- Ajouter la commande `turf backfill` pour demander, suivre ou retirer une reprise.
+- Ajouter l'avancement de la reprise au bilan quotidien et au fichier de battement.
+- Ajouter la décision d'architecture 0006 : la reprise est exécutée par le collecteur.
+
 ### Ajouté — sprint 1, collecte brute
 
 - Ajouter le client HTTP de la source PMU : débit plafonné à 1 requête par seconde, reprises bornées, arrêt au troisième refus consécutif.
