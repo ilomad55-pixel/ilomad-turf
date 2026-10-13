@@ -191,12 +191,20 @@ Le collecteur s'arrête proprement, puis relit son journal au démarrage : les t
 
 ### 6.1 Passer d'une installation du sprint 1 au sprint 2
 
-La mise à jour ajoute deux services, `postgres` et `ingestion`. Avant l'étape 6 ci-dessus, ajouter à `.env` :
+La mise à jour ajoute deux services, `postgres` et `ingestion`. La base a besoin d'un mot de passe, **qui n'existe pas encore : c'est cette étape qui le crée.** Avant l'étape 6 ci-dessus :
 
 ```bash
-POSTGRES_PASSWORD=<résultat de : openssl rand -hex 24>
-TURF_BASE_URL=postgresql+psycopg://turf:<le même mot de passe>@postgres:5432/turf
+cd /opt/ilomad-turf
+
+# Crée un mot de passe et l'écrit aux deux endroits de .env où il est attendu
+MDP=$(openssl rand -hex 24)
+sed -i '/^POSTGRES_PASSWORD=/d; /^TURF_BASE_URL=/d' .env
+printf 'POSTGRES_PASSWORD=%s
+TURF_BASE_URL=postgresql+psycopg://turf:%s@postgres:5432/turf
+' "$MDP" "$MDP" >> .env
 ```
+
+Sans ce mot de passe, `docker compose up` s'arrête sur `dependency postgres failed to start`. La collecte n'en souffre pas : seuls `postgres` et `ingestion` restent à l'arrêt.
 
 Relancer d'abord `scripts/etat_vps.sh` : les deux nouveaux services peuvent prendre jusqu'à 1 Go de mémoire de plus. Au premier démarrage, l'ingestion charge tout ce que le collecteur a déjà écrit.
 
@@ -293,7 +301,7 @@ L'image et le fichier Compose n'ont pas pu être essayés avant le premier dépl
 | `Unable to locate package rclone` | Dépôt Debian sans rclone | Retirer `rclone` de la ligne `apt-get install` ; la sauvegarde sera inopérante, le reste fonctionne |
 | `uv sync` : `lockfile needs to be updated` | `uv.lock` en retard sur `pyproject.toml` | Sur le poste local : `.\.venv\Scripts\uv.exe lock`, committer, pousser |
 | `Permission denied` sur `/data` au démarrage | Dossier `data` non attribué | `chown -R 10001:10001 data` |
-| `postgres` ne devient pas `healthy` | `POSTGRES_PASSWORD` vide dans `.env` | Le renseigner, puis `docker compose … up -d` |
+| `dependency postgres failed to start`, ou `postgres` ne devient pas `healthy` | `POSTGRES_PASSWORD` vide ou absent de `.env` : le mot de passe est à créer, il n'est fourni nulle part | Commandes du § 6.1, puis `docker compose … up -d` |
 | Ingestion : `password authentication failed` | Mot de passe différent dans `POSTGRES_PASSWORD` et `TURF_BASE_URL`, ou modifié après la création de la base | Les aligner. Le mot de passe est fixé à la création du volume : pour en changer, reconstruire la base (§ 7.1) |
 | Ingestion : `TURF_BASE_URL n'est pas définie` | Variable absente de `.env` | L'ajouter (§ 4) |
 
