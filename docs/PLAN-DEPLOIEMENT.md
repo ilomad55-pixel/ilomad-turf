@@ -1,7 +1,7 @@
 # Plan de déploiement — ILOMAD-TURF
 
-> **Version** : 1.1 | **Date** : 13/10/2026
-> **Périmètre** : sprints 1 et 2 — collecteur, surveillance, base PostgreSQL, ingestion
+> **Version** : 1.2 | **Date** : 13/10/2026
+> **Périmètre** : sprints 1 à 3 — collecteur, surveillance, base PostgreSQL, ingestion, application
 > **Hébergement** : VPS existant, partagé avec la production d'autres projets
 
 Ce document permet à quelqu'un qui n'a pas écrit le code d'installer, de mettre à jour et de revenir en arrière. Pour la vie courante et les pannes, voir [EXPLOITATION.md](./EXPLOITATION.md).
@@ -10,10 +10,12 @@ Ce document permet à quelqu'un qui n'a pas écrit le code d'installer, de mettr
 >
 > | Élément | État |
 > |---------|------|
-> | Code | 160 tests, dont une journée de collecte simulée et l'ingestion sur un vrai PostgreSQL |
+> | Code | 235 tests, dont une journée de collecte simulée, l'ingestion sur un vrai PostgreSQL et l'application pilotée sans navigateur |
 > | Collecteur | A tourné 45 minutes contre la vraie source, puis redémarré sans rien refaire |
 > | Ingestion | Vérifiée sur 17 jours réels de 2021 à 2026 : 0 document illisible, contrôles de qualité au vert |
 > | Reprise d'historique | **Jamais lancée contre la vraie source.** Vérifiée par simulation seulement |
+> | Rapport de référence, export | Vérifiés sur 17 jours réels (271 courses de trot hors test gelé). **Jamais lancés sur cinq ans** : durée et mémoire non mesurées |
+> | Application | Vérifiée sur le poste de développement. Service `app` **jamais lancé dans Docker** |
 > | PostgreSQL | Testé en version 16 sur le poste de développement ; la production utilise la version 17 |
 > | Image Docker, fichier Compose | **Jamais construits ni lancés** : pas de Docker sur le poste. Les étapes d'installation Python de l'image ont été rejouées à part, avec succès |
 > | Sauvegarde rclone | **Jamais lancée** contre un vrai stockage |
@@ -42,8 +44,10 @@ La base PostgreSQL est dans un volume Docker (`ilomad-turf_base`). Elle se recon
 | `surveillance` | `turf surveiller` | Alerte si le collecteur est muet ou le disque plein ; sauvegarde nocturne | 256 Mo | 0,25 |
 | `postgres` | PostgreSQL 17 | Base de travail | 512 Mo | 1,0 |
 | `ingestion` | `turf parse --en-continu` | Charge dans la base ce que le collecteur écrit, toutes les 5 minutes | 512 Mo | 1,0 |
+| `app` | `turf app` | Application : programme, marché, santé de la collecte. Lecture seule | 384 Mo | 0,5 |
+| `outils` | à la demande | Export Parquet et rapport de référence. Ne tourne que le temps d'une commande (`run --rm`) | 1 Go | 1,0 |
 
-Total des plafonds : 1 472 Mo. Aucun port n'est ouvert sur Internet ; PostgreSQL écoute sur `127.0.0.1:5440`, joignable par tunnel SSH.
+Total des plafonds permanents : 1 856 Mo, plus 1 Go le temps d'une commande `outils`. Aucun port n'est ouvert sur Internet ; PostgreSQL écoute sur `127.0.0.1:5440` et l'application sur `127.0.0.1:8510`, joignables par tunnel SSH (§ 11).
 
 **Le collecteur ne dépend d'aucun autre service.** Base arrêtée, ingestion en panne, mise à jour en cours : il continue d'écrire sur disque, et l'ingestion rattrape ensuite.
 
@@ -208,6 +212,29 @@ Sans ce mot de passe, `docker compose up` s'arrête sur `dependency postgres fai
 
 Relancer d'abord `scripts/etat_vps.sh` : les deux nouveaux services peuvent prendre jusqu'à 1 Go de mémoire de plus. Au premier démarrage, l'ingestion charge tout ce que le collecteur a déjà écrit.
 
+### 6.2 Passer d'une installation du sprint 2 au sprint 3
+
+La mise à jour ajoute le service `app` et le service à la demande `outils`. Rien à ajouter à `.env`.
+
+```bash
+cd /opt/ilomad-turf
+
+# Avant : 384 Mo de plus en permanence, 1 Go le temps d'un export. Le port 8510 doit être libre.
+bash scripts/etat_vps.sh
+
+# Puis la mise à jour habituelle (§ 6, étapes 1 à 6)
+```
+
+Vérifier ensuite l'application depuis son poste :
+
+```powershell
+# Sur le poste : ouvre le tunnel, à laisser ouvert
+ssh -L 8510:127.0.0.1:8510 root@<hote>
+# Puis, dans un navigateur : http://localhost:8510
+```
+
+Si `app` ne démarre pas, la collecte et l'ingestion ne sont pas touchées : corriger sans urgence (§ 9).
+
 ---
 
 ## 7. Retour arrière
@@ -255,7 +282,7 @@ Durée : de l'ordre de 40 ms par document sur le poste de développement, soit q
 ```bash
 cd /opt/ilomad-turf
 
-# Les quatre services sont « Up », postgres « healthy »
+# Les cinq services sont « Up », postgres « healthy »
 docker compose -f docker/docker-compose.prod.yml ps
 
 # Le collecteur a démarré et consigne des tâches
@@ -274,11 +301,15 @@ docker compose -f docker/docker-compose.prod.yml logs --tail=20 ingestion
 docker compose -f docker/docker-compose.prod.yml exec ingestion turf migrate --verifier
 docker compose -f docker/docker-compose.prod.yml exec ingestion turf qualite
 
+# L'application répond
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8510/_stcore/health
+
 # La consommation reste sous les plafonds
 docker stats --no-stream
 ```
 
-- [ ] `ps` : quatre services à l'état `Up`, `postgres` marqué `healthy`
+- [ ] `ps` : cinq services à l'état `Up`, `postgres` marqué `healthy`
+- [ ] Application : `curl` affiche `200` ; par le tunnel SSH, la page « Santé de la collecte » indique « En marche »
 - [ ] Journal du collecteur : ligne `collecte démarrée`, puis des lignes `… : faite`
 - [ ] `battement.json` : horodatage récent, `suspendue_jusqu_a` à `null`
 - [ ] Dossier du jour : `_documents.jsonl`, `_taches.jsonl`, sous-dossiers `R…C…`
@@ -304,8 +335,11 @@ L'image et le fichier Compose n'ont pas pu être essayés avant le premier dépl
 | `dependency postgres failed to start`, ou `postgres` ne devient pas `healthy` | `POSTGRES_PASSWORD` vide ou absent de `.env` : le mot de passe est à créer, il n'est fourni nulle part | Commandes du § 6.1, puis `docker compose … up -d` |
 | Ingestion : `password authentication failed` | Mot de passe différent dans `POSTGRES_PASSWORD` et `TURF_BASE_URL`, ou modifié après la création de la base | Les aligner. Le mot de passe est fixé à la création du volume : pour en changer, reconstruire la base (§ 7.1) |
 | Ingestion : `TURF_BASE_URL n'est pas définie` | Variable absente de `.env` | L'ajouter (§ 4) |
+| `app` : `Bind for 127.0.0.1:8510 failed: port is already allocated` | Un autre projet occupe le port | Dans `docker/docker-compose.prod.yml`, remplacer le premier `8510` de `127.0.0.1:8510:8510` par un port libre ; adapter le tunnel SSH |
+| `app` redémarre en boucle, `PermissionError` sur un dossier `.streamlit` | Streamlit n'a pas pu écrire ses réglages | Vérifier que `HOME: /tmp` est bien dans le service `app` du fichier Compose |
+| `app` ou `outils` arrêté par le système (`OOMKilled` dans `docker inspect`) | Plafond de mémoire trop bas | Relever `mem_limit` du service, après avoir vérifié la mémoire libre du VPS |
 
-**Une panne de la base ou de l'ingestion n'arrête pas la collecte.** Si seuls ces deux services posent problème, laisser tourner `collecteur` et `surveillance` et corriger sans urgence : rien n'est perdu.
+**Une panne de la base, de l'ingestion ou de l'application n'arrête pas la collecte.** Si seuls ces services posent problème, laisser tourner `collecteur` et `surveillance` et corriger sans urgence : rien n'est perdu.
 
 En dernier recours, le collecteur peut tourner sans Docker sur n'importe quelle machine disposant de Python 3.13 :
 
@@ -336,7 +370,8 @@ Ne jamais supprimer `data/raw/` sans avoir vérifié la sauvegarde : les cotes a
 | Serveur | VPS partagé avec agedor-services, pointage, bajaj |
 | Répertoire | `/opt/ilomad-turf/` |
 | Accès | SSH, compte `root` |
-| Ports | Aucun ouvert sur Internet. `127.0.0.1:5440` : PostgreSQL |
+| Ports | Aucun ouvert sur Internet. `127.0.0.1:5440` : PostgreSQL. `127.0.0.1:8510` : application |
+| Accès à l'application depuis un poste | `ssh -L 8510:127.0.0.1:8510 root@<hote>`, puis `http://localhost:8510`. L'application n'a pas de mot de passe : c'est le tunnel SSH qui en protège l'accès |
 | Accès à la base depuis un poste | `ssh -L 5440:127.0.0.1:5440 root@<hote>`, puis `postgresql://turf:<mot de passe>@127.0.0.1:5440/turf` |
 | Journaux | `docker compose … logs`, 5 fichiers de 10 Mo par service |
 | Sauvegarde | Chaque nuit à 3 h 30 (Paris), `data/raw/` vers le stockage S3. La base n'est pas sauvegardée : elle se reconstruit |

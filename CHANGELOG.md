@@ -7,8 +7,25 @@
 
 ### À faire lors de la mise à jour d'une installation existante
 
-- Ajouter à `.env` : `POSTGRES_PASSWORD` et `TURF_BASE_URL` (voir `.env.example` et le § 6.1 du plan de déploiement).
-- Relancer `scripts/etat_vps.sh` : deux services de plus, jusqu'à 1 Go de mémoire.
+- Depuis le sprint 1 : ajouter à `.env` `POSTGRES_PASSWORD` et `TURF_BASE_URL` (voir `.env.example` et le § 6.1 du plan de déploiement).
+- Depuis le sprint 2 : rien à ajouter à `.env`. Un service de plus, `app` (384 Mo, port `127.0.0.1:8510`) : relancer `scripts/etat_vps.sh` avant, puis suivre le § 6.2 du plan de déploiement.
+
+### Ajouté — sprint 3, référence du marché et application v0
+
+- Ajouter le modèle 0 : probabilités du marché à partir de la cote, avec ou sans correction du biais favori-outsider (exposant ajusté par maximum de vraisemblance).
+- Ajouter la bibliothèque de métriques : log-perte, Brier, calibration par tranches, rang du gagnant, taux de retour par la somme des 1/cote, intervalle de confiance par rééchantillonnage de jours entiers.
+- Ajouter le rapport de référence du marché (`turf evaluate`) : les quatre cotes mesurées par discipline, courses écartées comptées par motif, comparaisons sur courses communes.
+- Ajouter le découpage entraînement, réglage, test gelé ; le test gelé est écarté d'office de toute mesure.
+- Ajouter l'export Parquet (`turf export`) : partants à plat et performances, un fichier par année.
+- Ajouter la couche `services/` (programme, marché, santé de la collecte) et l'application Streamlit v0 (`turf app`).
+- Ajouter les services `app` et `outils` au fichier Compose de production.
+- Ajouter la décision d'architecture 0007 : protocole de mesure du marché.
+
+### Modifié — sprint 3
+
+- Modifier le plan de déploiement et le guide d'exploitation pour l'application, l'export et le rapport.
+- Ajouter numpy, polars et streamlit aux dépendances.
+- Passer la version à 0.4.0.
 
 ### Ajouté — sprint 2, reprise d'historique
 

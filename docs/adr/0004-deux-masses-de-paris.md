@@ -54,3 +54,21 @@ Une référence de marché « cote de référence des points de vente » serait 
 Au pari mutuel, un pari est payé à la **cote finale**, pas à la cote vue 30 minutes avant. Sur l'échantillon, la cote finale est nettement meilleure que la cote de référence (log-perte inférieure de 0,07 à 0,13). Battre la cote de référence est donc plus facile que battre le marché auquel on est réellement payé.
 
 Le plan compare le modèle combiné à « la cote seule » sans préciser laquelle. Recommandation, à valider par Olivier avant le sprint 4 : le rapport de décision publie **les deux écarts** — contre la cote de référence (même information que le modèle) et contre la cote finale (ce qui compte pour parier) — et le feu vert pour de l'argent réel exige le second.
+
+## État au 13/10/2026 (sprint 3)
+
+L'outil qui tranche existe : `turf evaluate` mesure les quatre cotes par discipline, compte les courses où chacune manque, et les compare deux à deux sur leurs courses communes ([ADR 0007](./0007-protocole-de-mesure-du-marche.md)).
+
+**La décision n'est pas prise** : elle demande les cinq ans d'historique, et seuls 17 jours sont disponibles hors du VPS. Sur ces 17 jours (271 courses de trot en France hors test gelé), à titre indicatif :
+
+| Cote | Courses évaluables | Log-perte |
+|------|--------------------|-----------|
+| Référence, points de vente | 207 sur 271 (76 %) | 1,946 |
+| Finale, points de vente | 250 sur 271 (92 %) | 1,898 |
+| Référence et finale, internet | 66 | 1,877 et 1,775 |
+
+- La cote finale bat la cote de référence de 0,10 sur les mêmes courses (intervalle à 95 % : 0,06 à 0,14). L'écart est établi dès cet échantillon.
+- L'écart entre les deux cotes de référence ne l'est pas (0,02 en faveur d'internet sur 60 courses ; intervalle de −0,03 à 0,06).
+- La couverture de la masse internet n'est pas mesurable ici : sur cet échantillon, elle n'a été demandée à la source que pour une minorité de courses.
+
+À faire quand la reprise d'historique est terminée : lancer `turf evaluate` sur le VPS ([EXPLOITATION.md § 8.2](../EXPLOITATION.md#82-produire-le-rapport-de-référence-du-marché)), puis consigner ici la masse retenue. Critères, dans l'ordre : couverture (une référence qui manque sur un quart des courses n'en est pas une), puis log-perte de la cote de référence sur les courses communes.

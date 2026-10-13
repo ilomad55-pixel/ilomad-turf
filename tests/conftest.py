@@ -223,3 +223,25 @@ def brut(tmp_path: Path):
 
     shutil.copytree(FIXTURES_BRUTES, tmp_path / "raw")
     return StockageBrut(tmp_path / "raw")
+
+
+@pytest.fixture
+def base_chargee(base, brut):
+    """La base de test, les trois jours de données brutes ingérés."""
+    from turf.ingestion.pilote import ingerer
+
+    assert not ingerer(base, brut).anomalies
+    return base
+
+
+@pytest.fixture(autouse=True)
+def _journaux_sans_flux_ferme():
+    """Une commande lancée par CliRunner branche les journaux sur un flux qu'il ferme
+    ensuite : on retire ce branchement, sinon chaque message suivant affiche une erreur."""
+    import logging
+
+    yield
+    racine = logging.getLogger()
+    for sortie in racine.handlers[:]:
+        if isinstance(sortie, logging.StreamHandler) and getattr(sortie.stream, "closed", False):
+            racine.removeHandler(sortie)

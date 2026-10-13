@@ -9,18 +9,23 @@ turf backfill                   demande, suit ou retire une reprise d'historique
 turf migrate                    crée ou met à niveau les tables de la base
 turf parse                      charge dans la base ce que le collecteur a écrit
 turf qualite                    contrôle la base
+turf export                     écrit les tables d'entraînement en Parquet
+turf evaluate                   mesure les cotes : rapport de référence du marché
+turf app                        lance l'application
 """
 
 from __future__ import annotations
 
 import json
 import signal
+import sys
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from turf import __version__
+from turf import __version__, export
 from turf.alertes import Alerteur
 from turf.collecte import couverture as mesure
 from turf.collecte import reprise
@@ -31,6 +36,8 @@ from turf.collecte.ressources import PROGRAMME, Demande
 from turf.collecte.stockage_brut import StockageBrut
 from turf.config import ConfigurationInvalide, Parametres
 from turf.db import session
+from turf.evaluation import echantillon, reference
+from turf.evaluation.periodes import REGLAGE
 from turf.horloge import PARIS, Horloge, jour_de_programme
 from turf.ingestion import qualite as controles
 from turf.ingestion.pilote import ServiceIngestion, ingerer
@@ -370,6 +377,125 @@ def qualite(
     if any(controle.bloquant for controle in resultats):
         typer.echo("Au moins un contrôle dépasse son seuil bloquant.")
         raise typer.Exit(1)
+
+
+@app.command("export")
+def exporter(
+    sortie: Annotated[
+        Path | None,
+        typer.Option("--sortie", help="Dossier des fichiers (défaut : <données>/parquet)."),
+    ] = None,
+    depuis: Annotated[
+        int | None, typer.Option("--depuis", help="Première année exportée (défaut : toutes).")
+    ] = None,
+) -> None:
+    """Écrit les partants et les performances en Parquet, un fichier par année."""
+    parametres = _parametres()
+    dossier = sortie or parametres.dossier_donnees / "parquet"
+    with _moteur(parametres).connect() as connexion:
+        fichiers = export.exporter(connexion, dossier, depuis)
+    for fichier in fichiers:
+        typer.echo(f"{fichier.chemin.name:<28} {fichier.lignes:>9} lignes")
+    if not fichiers:
+        typer.echo("Rien à exporter : la base est vide sur cette période.")
+        raise typer.Exit(1)
+    typer.echo(f"{len(fichiers)} fichiers dans {dossier}")
+
+
+@app.command()
+def evaluate(
+    perimetre: Annotated[
+        str, typer.Option("--perimetre", help="Courses mesurées : trot-france, trot ou tout.")
+    ] = echantillon.TROT_FRANCE,
+    coupure: Annotated[
+        str,
+        typer.Option(
+            "--coupure",
+            help="La correction du biais est ajustée avant cette date, jugée après. AAAA-MM-JJ.",
+        ),
+    ] = REGLAGE[0].isoformat(),
+    parquet: Annotated[
+        Path | None,
+        typer.Option("--parquet", help="Lit les fichiers de ce dossier au lieu de la base."),
+    ] = None,
+    sortie: Annotated[
+        Path | None,
+        typer.Option("--sortie", help="Dossier du rapport (défaut : <données>/rapports)."),
+    ] = None,
+) -> None:
+    """Mesure les cotes contre les résultats : rapport de référence du marché.
+
+    Le test gelé (10/2025 → 09/2026) est toujours écarté.
+    """
+    parametres = _parametres()
+    horloge = Horloge()
+    if perimetre not in echantillon.PERIMETRES:
+        raise typer.BadParameter(f"périmètre attendu : {', '.join(echantillon.PERIMETRES)}")
+    jour_de_coupure = _jour(coupure, horloge)
+    if parquet is not None:
+        try:
+            donnees = export.relire(parquet, colonnes=echantillon.COLONNES)
+        except FileNotFoundError as e:
+            typer.echo(f"Rien à lire : {e}.", err=True)
+            raise typer.Exit(1) from e
+    else:
+        with _moteur(parametres).connect() as connexion:
+            donnees = export.lire(
+                connexion, date(2000, 1, 1), date(2100, 1, 1), colonnes=echantillon.COLONNES
+            )
+    rapport = reference.calculer(
+        donnees,
+        nom_perimetre=perimetre,
+        coupure=jour_de_coupure,
+        maintenant=horloge.maintenant().astimezone(PARIS),
+    )
+    dossier = sortie or parametres.dossier_donnees / "rapports"
+    dossier.mkdir(parents=True, exist_ok=True)
+    nom = f"reference-marche-{jour_de_programme(horloge.maintenant())}"
+    (dossier / f"{nom}.json").write_text(
+        json.dumps(rapport, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
+    (dossier / f"{nom}.md").write_text(reference.rediger(rapport), encoding="utf-8")
+
+    typer.echo(
+        f"{rapport['courses_arrivees']} courses arrivées du {rapport['debut']} au "
+        f"{rapport['fin']} ; {rapport['courses_du_test_gele_ecartees']} courses du test gelé "
+        "écartées."
+    )
+    for m in rapport["mesures"]:
+        if not m["courses"]:
+            continue
+        chiffres = f"log-perte {m['log_perte']:.3f}   retour {m['taux_de_retour_median']:.1%}"
+        typer.echo(
+            f"{m['discipline']:<12} {m['libelle']:<36} {m['courses']:>6} courses"
+            f"   {chiffres.replace('.', ',')}"
+        )
+    typer.echo(f"Rapport : {dossier / (nom + '.md')}")
+    if not rapport["courses_arrivees"]:
+        raise typer.Exit(1)
+
+
+@app.command("app")
+def application(
+    adresse: Annotated[
+        str, typer.Option("--adresse", help="Adresse d'écoute (0.0.0.0 dans un conteneur).")
+    ] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port", help="Port d'écoute.")] = 8510,
+) -> None:
+    """Lance l'application (Streamlit) : programme du jour, marché, santé de la collecte."""
+    from streamlit.web import cli as streamlit
+
+    _parametres()
+    sys.argv = [
+        "streamlit",
+        "run",
+        str(Path(__file__).parent / "app" / "principal.py"),
+        f"--server.address={adresse}",
+        f"--server.port={port}",
+        "--server.headless=true",
+        "--browser.gatherUsageStats=false",
+    ]
+    streamlit.main()
 
 
 def _moteur(parametres: Parametres):

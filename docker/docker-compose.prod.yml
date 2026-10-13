@@ -85,5 +85,39 @@ services:
     mem_limit: 512m
     cpus: 1.0
 
+  # Application : programme du jour, marché, santé de la collecte. Ne fait que lire.
+  # N'écoute que sur 127.0.0.1 : on l'ouvre depuis son poste par un tunnel SSH
+  # (docs/PLAN-DEPLOIEMENT.md § 11).
+  app:
+    <<: *service
+    command: ["turf", "app", "--adresse", "0.0.0.0"]
+    environment:
+      TURF_DONNEES: /data
+      # Streamlit écrit ses réglages dans le dossier personnel, que l'utilisateur
+      # du conteneur n'a pas.
+      HOME: /tmp
+    volumes:
+      - ../data:/data:ro
+    ports:
+      - "127.0.0.1:8510:8510"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 384m
+    cpus: 0.5
+
+  # Commandes ponctuelles et gourmandes : export Parquet, rapport de référence.
+  # Ne démarre pas avec « up ». Usage :
+  #   docker compose -f docker/docker-compose.prod.yml run --rm outils turf export
+  outils:
+    <<: *service
+    profiles: ["outils"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 1g
+    cpus: 1.0
+
 volumes:
   base:

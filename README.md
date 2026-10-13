@@ -2,7 +2,7 @@
 
 > Application personnelle qui calcule des probabilités calibrées pour les courses de trot et les mesure contre la cote PMU. Python, PostgreSQL, Streamlit.
 
-**Statut** : sprint 2 (reprise d'historique, base, ingestion) — version 0.3.0
+**Statut** : sprint 3 (référence du marché, export, application v0) — version 0.4.0
 **Usage** : strictement personnel. Aucune donnée PMU ne doit sortir de l'application.
 
 ---
@@ -20,7 +20,7 @@ Pour y répondre honnêtement, l'application :
 
 Le verdict (go/no-go) est rendu à la fin du sprint 4, sur 12 mois de courses que le modèle n'a jamais vues.
 
-**Où en est-on.** L'étape 1 est écrite : le collecteur suit le programme du jour, stocke chaque réponse de la source telle quelle, et peut rapatrier cinq ans d'historique. Une base PostgreSQL met ces fichiers en forme. Les étapes 2 à 4 viennent aux sprints suivants.
+**Où en est-on.** L'étape 1 est écrite : le collecteur suit le programme du jour, stocke chaque réponse de la source telle quelle, et peut rapatrier cinq ans d'historique. Une base PostgreSQL met ces fichiers en forme. La barre à franchir est mesurée : `turf evaluate` dit ce que valent les cotes seules, et une application montre le programme, le marché et la santé de la collecte. Le modèle (étapes 2 et 3) vient au sprint 4.
 
 ---
 
@@ -49,8 +49,9 @@ Le verdict (go/no-go) est rendu à la fin du sprint 4, sur 12 mois de courses qu
 | Alertes et sauvegarde | Telegram, rclone vers un stockage S3 | Oui |
 | Déploiement | Docker Compose sur VPS | Oui |
 | Base de données | PostgreSQL 17, SQLAlchemy, migrations Alembic | Oui |
+| Calcul et évaluation | NumPy, Polars, fichiers Parquet | Oui |
+| Interface | Streamlit | Oui |
 | Modèles | scikit-learn, LightGBM, statsmodels | Sprint 4 |
-| Interface | Streamlit | Sprint 3 |
 
 ---
 
@@ -134,6 +135,29 @@ $env:TURF_BASE_URL = "postgresql+psycopg://turf@127.0.0.1:5440/turf"
 
 La base ne contient rien qui ne soit dans `data/raw` : `parse --rejouer` la reconstruit à l'identique.
 
+### Référence du marché, export, application
+
+Ces commandes lisent la base (`TURF_BASE_URL`). Aucune n'interroge la source PMU.
+
+```powershell
+# Ce que valent les cotes seules : log-perte, calibration, taux de retour, par discipline.
+# Écrit data\rapports\reference-marche-AAAA-MM-JJ.md et .json
+.\.venv\Scripts\turf.exe evaluate
+.\.venv\Scripts\turf.exe evaluate --perimetre trot --coupure 2024-10-01
+
+# Tables d'entraînement en Parquet, un fichier par année, dans data\parquet\
+.\.venv\Scripts\turf.exe export
+.\.venv\Scripts\turf.exe export --depuis 2026
+
+# Le même rapport, calculé depuis les fichiers Parquet (sans base)
+.\.venv\Scripts\turf.exe evaluate --parquet data\parquet
+
+# L'application : http://127.0.0.1:8510
+.\.venv\Scripts\turf.exe app
+```
+
+Le rapport écarte toujours les courses du 01/10/2025 au 30/09/2026 : c'est le test gelé, qui ne sera ouvert qu'une fois, au sprint 4. Comment lire le rapport : [docs/adr/0007](./docs/adr/0007-protocole-de-mesure-du-marche.md).
+
 ### Tests et qualité
 
 ```powershell
@@ -144,7 +168,7 @@ La base ne contient rien qui ne soit dans `data/raw` : `parse --rejouer` la reco
 
 Les tests rejouent une journée complète de collecte avec une source et une horloge simulées : ils ne font aucun appel réseau.
 
-**Tests de la base.** Une vingtaine de tests chargent trois jours de données réelles dans un vrai PostgreSQL. Ils sont **ignorés** tant que `TURF_TEST_BASE_URL` n'est pas définie ; pytest l'indique par `19 skipped`. Pour les lancer, démarrer une base jetable dont le nom contient « test » (les tests la vident) :
+**Tests de la base.** 45 tests chargent trois jours de données réelles dans un vrai PostgreSQL, et pilotent l'application sans navigateur. Ils sont **ignorés** tant que `TURF_TEST_BASE_URL` n'est pas définie ; pytest l'indique par `45 skipped`. Pour les lancer, démarrer une base jetable dont le nom contient « test » (les tests la vident) :
 
 ```powershell
 docker run --rm -d --name turf-test -p 127.0.0.1:5440:5432 `
@@ -193,7 +217,7 @@ ilomad-turf/
 ├── README.md  CHANGELOG.md  .env.example  pyproject.toml  uv.lock
 ├── docker/
 │   ├── Dockerfile                image unique, une commande par service
-│   └── docker-compose.prod.yml   collecteur, surveillance, base, ingestion
+│   └── docker-compose.prod.yml   collecteur, surveillance, base, ingestion, application
 ├── docs/
 │   ├── BRIEF.md  CAHIER-DES-CHARGES.md  PLAN-REALISATION.md
 │   ├── ARCHITECTURE-TECHNIQUE.md  SPEC-SOURCE-PMU.md  MODELE-DONNEES.md
@@ -203,7 +227,7 @@ ilomad-turf/
 │   └── spike/                    rapport chiffré du spike
 ├── scripts/                      outils du sprint 0
 ├── src/turf/
-│   ├── cli.py                    une commande par étape : collect, backfill, parse, qualite…
+│   ├── cli.py                    une commande par étape : collect, parse, evaluate, app…
 │   ├── config.py                 toute la configuration, lue dans l'environnement
 │   ├── alertes.py                Telegram
 │   ├── surveillance.py           collecteur muet, disque, sauvegarde nocturne
@@ -218,13 +242,23 @@ ilomad-turf/
 │   │   ├── schema.py             toutes les tables, en un seul endroit
 │   │   ├── session.py            connexion, migrations
 │   │   └── migrations/           révisions Alembic, embarquées dans le paquet
-│   └── ingestion/
-│       ├── analyse.py            d'une réponse JSON à des lignes (fonctions pures)
-│       ├── chargement.py         des lignes à la base, sans doublon
-│       ├── pilote.py             quels jours lire ; service d'ingestion en continu
-│       └── qualite.py            contrôles de cohérence
+│   ├── ingestion/
+│   │   ├── analyse.py            d'une réponse JSON à des lignes (fonctions pures)
+│   │   ├── chargement.py         des lignes à la base, sans doublon
+│   │   ├── pilote.py             quels jours lire ; service d'ingestion en continu
+│   │   └── qualite.py            contrôles de cohérence
+│   ├── export.py                 la table des partants à plat ; lecture et écriture Parquet
+│   ├── modeles/
+│   │   └── marche.py             modèle 0 : la cote, avec ou sans correction du biais
+│   ├── evaluation/
+│   │   ├── periodes.py           entraînement, réglage, test gelé
+│   │   ├── echantillon.py        quelles courses sont évaluables, lesquelles sont écartées
+│   │   ├── metriques.py          log-perte, Brier, calibration, intervalle de confiance
+│   │   └── reference.py          le rapport de référence du marché
+│   ├── services/                 ce que l'application affiche : programme, marché, santé
+│   └── app/                      pages Streamlit ; n'appellent que services/
 ├── tests/                        dont fixtures/raw : trois jours réels, anonymisés
-└── data/                         fichiers bruts, état, cache — jamais dans Git
+└── data/                         fichiers bruts, état, parquet, rapports — jamais dans Git
 ```
 
 ---
@@ -252,6 +286,7 @@ ilomad-turf/
 | `Dossier des données brutes non inscriptible` au démarrage | Sur le VPS : `chown -R 10001:10001 data` |
 | `Configuration invalide : …` au démarrage | Corriger la variable nommée dans `.env`, d'après [.env.example](./.env.example) |
 | L'ingestion signale des documents illisibles | [docs/EXPLOITATION.md § 4.10](./docs/EXPLOITATION.md#4-que-faire-quand-une-alerte-arrive) |
+| L'application ne s'ouvre pas | [docs/EXPLOITATION.md § 8.1](./docs/EXPLOITATION.md#81-ouvrir-lapplication) |
 | La base est abîmée ou douteuse | La reconstruire : [docs/PLAN-DEPLOIEMENT.md § 7.1](./docs/PLAN-DEPLOIEMENT.md#71-reconstruire-la-base) |
 
 ---

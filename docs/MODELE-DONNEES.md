@@ -1,6 +1,6 @@
 # Modèle de données — ILOMAD-TURF
 
-> **Version** : 1.0 | **Date** : 13/10/2026 | **Base** : PostgreSQL 17
+> **Version** : 1.1 | **Date** : 13/10/2026 | **Base** : PostgreSQL 17
 > **Source de vérité du schéma** : [src/turf/db/schema.py](../src/turf/db/schema.py). Ce document l'explique ; en cas de désaccord, le code a raison.
 
 Ce document sert à qui écrit une requête ou une variable de modèle. Il dit ce que contient chaque table, dans quelle unité, et surtout **ce qui était connu avant la course et ce qui ne l'était pas**.
@@ -308,3 +308,38 @@ En production, la migration est appliquée par le service d'ingestion à son dé
 ## 10. Nommage
 
 Tables et colonnes sont en minuscules avec des tirets bas, dans des schémas PostgreSQL. La convention de l'espace de travail demande des noms de tables en `PascalCase` ; elle n'est pas suivie ici. PostgreSQL met en minuscules tout nom non entouré de guillemets : des tables en `PascalCase` imposeraient des guillemets dans chaque requête. Les noms retenus sont ceux du plan de réalisation approuvé.
+
+---
+
+## 11. Export Parquet
+
+`turf export` écrit deux tables à plat dans `data/parquet/`, un fichier par année civile. Ce sont elles que lisent l'évaluation et, au sprint 4, l'entraînement. Définition : [src/turf/export.py](../src/turf/export.py).
+
+### 11.1 `partants-AAAA.parquet`
+
+Une ligne par partant. L'année est celle de `date_programme`.
+
+| Colonnes | Origine | Connu avant la course ? |
+|----------|---------|-------------------------|
+| `course_id`, `date_programme`, `reunion`, `numero_course`, `depart_prevu`, `hippodrome`, `pays`, `discipline`, `specialite`, `distance_m`, `corde`, `categorie_particularite`, `condition_sexe`, `condition_age`, `type_piste`, `allocation_eur`, `partants_declares` | `core.course`, `core.reunion` | Oui |
+| `partant_id`, `numero`, `cheval_id`, `cheval`, `cheval_annee_naissance`, `cheval_race`, `proprietaire`, `eleveur`, `age`, `sexe`, `oeilleres`, `avis_entraineur`, `partant_distance_m`, `handicap_poids`, `place_corde`, `inedit`, `ecurie` | `core.partant`, `core.cheval` | Oui |
+| `musique`, `courses`, `victoires`, `places`, `places_second`, `places_troisieme`, `gains_*_cts` | `core.partant` | Oui : carrière du cheval telle qu'elle était avant la course |
+| `statut`, `driver_id`, `driver`, `driver_change`, `entraineur_id`, `entraineur`, `deferre` | `core.partant` | **Dernier état connu.** Un forfait ou un changement annoncé après l'heure du pronostic y figure (§ 8) |
+| `cote_reference_offline`, `cote_reference_internet`, et leurs horodatages `cote_reference_le_*` | Dernière photo du partant, par masse | Oui, si l'horodatage précède l'heure du pronostic |
+| `cote_finale_offline`, `cote_finale_internet`, et `cote_finale_le_*` | Cote directe de la dernière photo, seulement si elle a été prise après la course (créneau `arrivee` ou `reprise`) | **Non** |
+| `resultat_course_statut`, `resultat_place`, `resultat_statut`, `resultat_ex_aequo`, `resultat_temps_ms`, `resultat_reduction_km_ms` | `core.course`, `core.resultat` | **Non** |
+
+Attention à deux noms proches : `numero_course` est le numéro de la course dans la réunion, `courses` le nombre de courses déjà courues par le cheval.
+
+Règle : tout ce qui commence par `resultat_`, et toute cote `finale`, est postérieur au départ. Ces colonnes servent à évaluer, et à construire l'historique des courses **suivantes** ; jamais comme variable de la course elle-même.
+
+### 11.2 `performances-AAAA.parquet`
+
+Les lignes de `core.performance` (§ 4.9), sans transformation. L'année est celle de `date_course` : les fichiers remontent donc plus loin que la collecte. La colonne `premiers` est une chaîne JSON.
+
+### 11.3 Bon à savoir
+
+- Une année est toujours exportée entière et son fichier remplacé. Relancer l'export après une reprise d'historique met tout à jour.
+- Les types des colonnes sont fixés dans le code : une colonne vide une année donnée garde son type, et les fichiers se lisent ensemble (`polars.read_parquet("data/parquet/partants-*.parquet")`).
+- Les instants sont en UTC.
+- Les photos de cotes intermédiaires (H-60, H-15, H-5…) ne sont pas dans l'export : seules la cote de référence et la cote finale y sont. Elles restent dans `core.partant_snapshot`.
