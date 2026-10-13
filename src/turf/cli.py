@@ -6,6 +6,9 @@ turf couverture                 bilan de collecte d'un jour
 turf surveiller                 surveillance et sauvegarde (service)
 turf alerte-test                vérifie la configuration Telegram
 turf backfill                   demande, suit ou retire une reprise d'historique
+turf migrate                    crée ou met à niveau les tables de la base
+turf parse                      charge dans la base ce que le collecteur a écrit
+turf qualite                    contrôle la base
 """
 
 from __future__ import annotations
@@ -27,7 +30,10 @@ from turf.collecte.planificateur import demandes, lire_programme, planifier
 from turf.collecte.ressources import PROGRAMME, Demande
 from turf.collecte.stockage_brut import StockageBrut
 from turf.config import ConfigurationInvalide, Parametres
+from turf.db import session
 from turf.horloge import PARIS, Horloge, jour_de_programme
+from turf.ingestion import qualite as controles
+from turf.ingestion.pilote import ServiceIngestion, ingerer
 from turf.journalisation import configurer
 from turf.surveillance import Surveillance
 
@@ -61,7 +67,7 @@ def _jour(valeur: str | None, horloge: Horloge) -> date:
         raise typer.BadParameter(f"date attendue au format AAAA-MM-JJ, reçu « {valeur} »") from e
 
 
-def _arret_sur_signal(service: Collecteur | Surveillance) -> None:
+def _arret_sur_signal(service: Collecteur | Surveillance | ServiceIngestion) -> None:
     def arreter(*_: object) -> None:
         service.demander_arret()
 
@@ -267,6 +273,111 @@ def backfill(
     reprise.ecrire_demande(parametres, demande)
     _afficher_reprise(parametres, demande)
     typer.echo("Le collecteur en marche la prend en compte dans la minute.")
+
+
+@app.command()
+def migrate(
+    verifier: Annotated[
+        bool,
+        typer.Option("--verifier", help="Ne change rien : dit si la base est conforme au schéma."),
+    ] = False,
+) -> None:
+    """Crée ou met à niveau les tables de la base PostgreSQL."""
+    moteur = _moteur(_parametres())
+    if not verifier:
+        session.migrer(moteur)
+        typer.echo("Base à niveau.")
+    ecarts = session.ecarts_avec_le_schema(moteur)
+    if ecarts:
+        typer.echo(f"La base diffère du schéma attendu ({len(ecarts)} écarts) :")
+        for ecart in ecarts[:20]:
+            typer.echo(f"  {ecart}")
+        raise typer.Exit(1)
+    typer.echo("La base est conforme au schéma.")
+
+
+@app.command()
+def parse(
+    rejouer: Annotated[
+        bool,
+        typer.Option("--rejouer", help="Vide les tables et relit tout depuis les fichiers bruts."),
+    ] = False,
+    en_continu: Annotated[
+        bool, typer.Option("--en-continu", help="Tourne en service : une passe à intervalle fixe.")
+    ] = False,
+    date_programme: Annotated[
+        str | None,
+        typer.Option("--date", help="Relit ce jour depuis sa première ligne, AAAA-MM-JJ."),
+    ] = None,
+) -> None:
+    """Charge dans la base ce que le collecteur a écrit sur disque (ingestion)."""
+    parametres = _parametres()
+    moteur = _moteur(parametres)
+    stockage = StockageBrut(parametres.dossier_brut)
+    if en_continu:
+        horloge = Horloge()
+        # Le service met la base à niveau lui-même : un déploiement n'a rien d'autre à lancer.
+        session.migrer(moteur)
+        service = ServiceIngestion(
+            moteur,
+            stockage,
+            Alerteur(parametres, horloge),
+            horloge,
+            parametres.ingestion_intervalle_s,
+        )
+        _arret_sur_signal(service)
+        service.executer()
+        return
+    relire = None
+    if date_programme:
+        jour = _jour(date_programme, Horloge())
+        if not stockage.dossier_jour(jour).exists():
+            typer.echo(f"Aucune donnée brute pour le {jour} dans {parametres.dossier_brut}.")
+            raise typer.Exit(1)
+        relire = [jour]
+    bilan = ingerer(moteur, stockage, rejouer=rejouer, relire=relire)
+    typer.echo(bilan.resume())
+    for anomalie in bilan.anomalies[:20]:
+        typer.echo(f"  anomalie : {anomalie}")
+    if bilan.anomalies:
+        raise typer.Exit(1)
+
+
+@app.command()
+def qualite(
+    debut: Annotated[
+        str | None, typer.Option("--debut", help="Premier jour contrôlé, AAAA-MM-JJ.")
+    ] = None,
+    fin: Annotated[
+        str | None, typer.Option("--fin", help="Dernier jour contrôlé, AAAA-MM-JJ.")
+    ] = None,
+) -> None:
+    """Contrôle la base : ce qui manque, ce qui est incohérent."""
+    parametres = _parametres()
+    horloge = Horloge()
+    premier = _jour(debut, horloge) if debut else date(2000, 1, 1)
+    dernier = _jour(fin, horloge)
+    with _moteur(parametres).connect() as connexion:
+        volumes = controles.volumes(connexion, premier, dernier)
+        resultats = controles.controler(connexion, premier, dernier)
+    typer.echo(f"Du {premier} au {dernier} : " + ", ".join(f"{n} {k}" for k, n in volumes.items()))
+    for controle in resultats:
+        taux = "" if controle.taux is None else f"{controle.taux:.2%}".replace(".", ",")
+        typer.echo(
+            f"{controle.verdict:<10} {controle.cas:>7} / {controle.total:<7} {taux:>7}  "
+            f"{controle.description}"
+        )
+    if any(controle.bloquant for controle in resultats):
+        typer.echo("Au moins un contrôle dépasse son seuil bloquant.")
+        raise typer.Exit(1)
+
+
+def _moteur(parametres: Parametres):
+    try:
+        return session.creer_moteur(parametres)
+    except ConfigurationInvalide as e:
+        typer.echo(f"Configuration invalide : {e}", err=True)
+        raise typer.Exit(2) from e
 
 
 def _afficher_reprise(parametres: Parametres, demande: dict | None) -> None:

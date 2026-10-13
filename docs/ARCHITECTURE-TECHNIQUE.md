@@ -1,8 +1,8 @@
 # Architecture technique — ILOMAD-TURF
 
-> **Version** : 1.2 | **Date** : 13/10/2026 | **Auteur** : Olivier MORA avec Claude Code
+> **Version** : 1.3 | **Date** : 13/10/2026 | **Auteur** : Olivier MORA avec Claude Code
 > **Depuis la version 1.0** : le collecteur ne dépend plus de la base ([ADR 0005](./adr/0005-collecteur-ne-depend-que-du-disque.md)) ; un service de surveillance est ajouté ; la reprise d'historique est exécutée par le collecteur ([ADR 0006](./adr/0006-reprise-executee-par-le-collecteur.md)).
-> **En production au sprint 1** : collecteur, surveillance, fichiers bruts, sauvegarde. Le reste est la cible des sprints suivants.
+> **Livré à ce jour** : collecteur, surveillance, sauvegarde (sprint 1) ; reprise d'historique, base PostgreSQL, ingestion, contrôles de qualité (sprint 2). Le reste est la cible des sprints suivants.
 
 Ce document décrit **comment** l'application est construite. Les exigences sont dans le [cahier des charges](./CAHIER-DES-CHARGES.md), le comportement de la source dans [SPEC-SOURCE-PMU.md](./SPEC-SOURCE-PMU.md), le « pourquoi » de chaque choix dans [adr/](./adr/).
 
@@ -41,7 +41,6 @@ flowchart LR
     RAW --> ING --> PG
     PG --> INF -->|"pronostics<br/>en ajout seul"| PG
     PG --> SVC --> APP
-    PG --> SURV
     PG --> PQ --> TRAIN
     TRAIN -->|"modèle versionné"| INF
 ```
@@ -162,24 +161,29 @@ Ces deux journaux sont en ajout seul. Avec les fichiers bruts, ils suffisent à 
 
 Trois schémas, du plus proche de la source au plus proche du modèle.
 
-| Schéma | Contenu | Tables principales |
-|--------|---------|--------------------|
-| `raw` | Traçabilité de la collecte, dérivée des journaux du disque | `document`, `tache_collecte` |
-| `core` | Modèle relationnel propre | `hippodrome`, `reunion`, `course`, `cheval`, `cheval_alias`, `personne`, `partant`, `partant_snapshot`, `resultat`, `rapport` |
-| `ml` | Modèles et pronostics | `modele_version`, `prediction`, `pari_fictif`, `evaluation` |
+| Schéma | Contenu | Tables | En place |
+|--------|---------|--------|----------|
+| `raw` | Ce que le collecteur a fait, dérivé des journaux du disque | `document`, `tache_collecte`, `ingestion` | Sprint 2 |
+| `core` | Modèle relationnel propre | `hippodrome`, `reunion`, `course`, `cheval`, `personne`, `partant`, `partant_snapshot`, `enjeu`, `mise`, `resultat`, `rapport`, `performance` | Sprint 2 |
+| `ml` | Modèles et pronostics | `modele_version`, `prediction`, `pari_fictif`, `evaluation` | Sprint 4 |
 
 Conventions :
 
 - horodatages en UTC (`timestamptz`) ; la date de programme, en heure de Paris, est conservée à part ;
-- montants en centimes, entiers, comme dans la source ;
+- valeurs reprises telles que la source les donne, l'unité dans le nom de la colonne (`_cts`, `_ms`, `_m`) ;
 - place et statut d'arrivée dans deux colonnes distinctes ;
+- ce qui n'est connu qu'après la course est à l'écart, dans `core.resultat` et `core.rapport` ;
 - `ml.prediction` : aucune mise à jour ni suppression, contrainte `created_at < heure_depart`.
 
-Le schéma complet (`MODELE-DONNEES.md`) est livré au sprint 2, avec les migrations.
+Description des tables, unités et requêtes types : [MODELE-DONNEES.md](./MODELE-DONNEES.md).
+
+**Ingestion.** Un service relit le disque toutes les cinq minutes et charge ce qui est nouveau. Toutes ses écritures sont des « insère, ou met à jour si la clé existe » : relire deux fois le même fichier ne change rien, et vider la base puis tout relire redonne la même base. Un document illisible est compté et signalé ; il n'empêche pas de charger les autres.
+
+**La base n'est pas sauvegardée.** Elle se reconstruit depuis `data/raw/`, qui l'est. Cela changera avec `ml.prediction`, première table dont le contenu ne se rederive pas.
 
 ### 5.3 Identité des chevaux
 
-L'identifiant `idCheval` de la source vaut `NOM-MÈRE-PÈRE`. Il est absent de l'historique ancien, mais ses trois composantes y sont présentes : la clé se reconstruit. `core.cheval` porte donc une clé naturelle (nom, mère, père) et `core.cheval_alias` absorbe les variantes d'orthographe. Détail et mesures dans [SPEC-SOURCE-PMU.md](./SPEC-SOURCE-PMU.md).
+L'identifiant `idCheval` de la source vaut `NOM-MÈRE-PÈRE`. Il est absent de l'historique ancien, mais ses trois composantes y sont présentes : la clé se reconstruit. `core.cheval` a donc pour clé ce triplet. Sur 4 402 partants réels de 2021 à 2026, il n'a produit ni doublon ni confusion : la table d'alias prévue par le plan est reportée, et `turf qualite` surveille les deux cas. Détail et mesures dans [SPEC-SOURCE-PMU.md](./SPEC-SOURCE-PMU.md).
 
 ---
 
@@ -251,7 +255,9 @@ Avant toute installation : `scripts/etat_vps.sh` doit rendre un feu vert (≥ 15
 | Collecteur muet | `etat/battement.json`, lu par la surveillance | Aucun battement depuis 10 minutes |
 | Disque | Surveillance, chaque minute | Occupation ≥ 80 % |
 | Sauvegarde | Surveillance, chaque nuit | En cas d'échec, ou si elle n'est pas configurée |
-| Champ attendu absent d'une réponse | Journal d'ingestion (sprint 2) | Immédiate |
+| Document illisible par l'ingestion | Journal d'ingestion, `raw.ingestion.anomalies` | Immédiate, puis toutes les 6 heures |
+| Ingestion à l'arrêt (base injoignable) | Journal d'ingestion | Immédiate, puis toutes les heures |
+| Qualité de la base | `turf qualite` | — |
 
 Aucun traitement ne s'arrête en silence : une erreur est journalisée avec son contexte, puis propagée ou transformée en alerte. Une même alerte n'est pas répétée avant une heure au moins.
 
@@ -261,8 +267,8 @@ La conduite à tenir pour chaque alerte est dans [EXPLOITATION.md](./EXPLOITATIO
 
 ## 11. Sauvegarde et reprise
 
-- **Chaque nuit** à 3 h 30 : copie de `data/raw/` vers le stockage S3, par rclone. La copie n'efface jamais rien à distance. Le `pg_dump` de la base s'y ajoutera au sprint 2.
-- **Perte de la base** : restaurer le dernier `pg_dump`, ou rejouer l'ingestion depuis les fichiers bruts.
+- **Chaque nuit** à 3 h 30 : copie de `data/raw/` vers le stockage S3, par rclone. La copie n'efface jamais rien à distance.
+- **Perte de la base** : la recréer et rejouer l'ingestion depuis les fichiers bruts (`turf parse --rejouer`). Quelques heures pour cinq ans de trot.
 - **Perte du VPS** : réinstaller, restaurer `data/raw/` depuis S3. La perte définitive se limite aux instantanés avant course non collectés pendant la panne et à ceux pris depuis la dernière sauvegarde.
 
 Les procédures détaillées sont dans [PLAN-DEPLOIEMENT.md](./PLAN-DEPLOIEMENT.md) (installation, mise à jour, retour arrière) et [EXPLOITATION.md](./EXPLOITATION.md) (alertes, restauration).

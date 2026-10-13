@@ -18,3 +18,5 @@ def configurer(niveau: str = "INFO") -> None:
     # les appels étant déjà consignés dans le journal des documents.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+    # Alembic détaille chaque étape de ses comparaisons : seules ses alertes nous intéressent.
+    logging.getLogger("alembic").setLevel(logging.WARNING)

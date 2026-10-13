@@ -1,8 +1,9 @@
 # Production — VPS partagé avec la production d'autres projets.
 #
-#   - aucun port publié : les deux services ne font que des appels sortants ;
+#   - aucun port ouvert sur Internet : PostgreSQL n'écoute que sur 127.0.0.1 ;
 #   - mémoire et CPU plafonnés sur chaque service ;
-#   - tout l'état est dans ../data, monté sur /data.
+#   - les données brutes sont dans ../data, monté sur /data ; la base, qui se
+#     reconstruit depuis elles, est dans un volume Docker.
 #
 # Lancement, depuis la racine du projet :
 #   docker compose -f docker/docker-compose.prod.yml up -d --build
@@ -22,9 +23,9 @@ x-service: &service
   volumes:
     - ../data:/data
   restart: unless-stopped
-  # Le collecteur termine la tâche en cours avant de s'arrêter (quelques secondes).
+  # Chaque service termine ce qu'il a en cours avant de s'arrêter (quelques secondes).
   stop_grace_period: 30s
-  logging:
+  logging: &journaux
     driver: json-file
     options:
       max-size: "10m"
@@ -32,6 +33,7 @@ x-service: &service
 
 services:
   # Suit le programme du jour et prend les instantanés, à 1 requête par seconde au plus.
+  # Ne dépend d'aucun autre service : rien de ce qui suit ne peut l'arrêter (ADR 0005).
   collecteur:
     <<: *service
     command: ["turf", "collect"]
@@ -45,3 +47,43 @@ services:
     command: ["turf", "surveiller"]
     mem_limit: 256m
     cpus: 0.25
+
+  # Base de travail. Tout son contenu se reconstruit depuis data/raw :
+  # elle n'est donc pas sauvegardée.
+  postgres:
+    image: postgres:17
+    # POSTGRES_PASSWORD vient de ../.env.
+    env_file: ../.env
+    environment:
+      POSTGRES_USER: turf
+      POSTGRES_DB: turf
+    volumes:
+      - base:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5440:5432"
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
+    shm_size: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U turf -d turf"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    logging: *journaux
+
+  # Charge dans la base ce que le collecteur écrit sur disque, toutes les cinq minutes.
+  # Met la base à niveau au démarrage. Ne fait que lire les données brutes.
+  ingestion:
+    <<: *service
+    command: ["turf", "parse", "--en-continu"]
+    volumes:
+      - ../data:/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 512m
+    cpus: 1.0
+
+volumes:
+  base:

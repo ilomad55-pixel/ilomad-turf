@@ -1,17 +1,25 @@
 # Plan de déploiement — ILOMAD-TURF
 
-> **Version** : 1.0 | **Date** : 12/10/2026
-> **Périmètre** : sprint 1 — collecteur et surveillance. La base de données arrive au sprint 2.
+> **Version** : 1.1 | **Date** : 13/10/2026
+> **Périmètre** : sprints 1 et 2 — collecteur, surveillance, base PostgreSQL, ingestion
 > **Hébergement** : VPS existant, partagé avec la production d'autres projets
 
 Ce document permet à quelqu'un qui n'a pas écrit le code d'installer, de mettre à jour et de revenir en arrière. Pour la vie courante et les pannes, voir [EXPLOITATION.md](./EXPLOITATION.md).
 
-> **État de validation au 12/10/2026.**
-> - Le code est couvert par 98 tests, dont une journée complète de collecte simulée.
-> - Le collecteur a tourné 45 minutes contre la vraie source, sur un poste local : tous les instantanés dus ont été pris à l'heure, puis un redémarrage a repris sans rien refaire.
-> - **L'image Docker n'a jamais été construite** : Docker n'est pas installé sur le poste de développement. Seules les deux étapes d'installation Python du `Dockerfile` ont été rejouées hors Docker, avec succès. L'image de base, l'installation de rclone et les droits sur `/data` ne sont pas vérifiés. La première construction sur le VPS en sera le premier essai ; en cas d'échec, voir le § 9.
-> - **La sauvegarde n'a jamais tourné** contre un vrai stockage : rclone n'est pas installé sur le poste. Elle est à vérifier à l'étape 8 du § 5, puis le lendemain matin dans `data/etat/sauvegarde.json`.
-> - **Les alertes Telegram n'ont jamais été envoyées à un vrai bot** : à vérifier à l'étape 6 du § 5.
+> **État de validation au 13/10/2026.** Ce qui est vérifié, et ce qui ne l'est pas.
+>
+> | Élément | État |
+> |---------|------|
+> | Code | 160 tests, dont une journée de collecte simulée et l'ingestion sur un vrai PostgreSQL |
+> | Collecteur | A tourné 45 minutes contre la vraie source, puis redémarré sans rien refaire |
+> | Ingestion | Vérifiée sur 17 jours réels de 2021 à 2026 : 0 document illisible, contrôles de qualité au vert |
+> | Reprise d'historique | **Jamais lancée contre la vraie source.** Vérifiée par simulation seulement |
+> | PostgreSQL | Testé en version 16 sur le poste de développement ; la production utilise la version 17 |
+> | Image Docker, fichier Compose | **Jamais construits ni lancés** : pas de Docker sur le poste. Les étapes d'installation Python de l'image ont été rejouées à part, avec succès |
+> | Sauvegarde rclone | **Jamais lancée** contre un vrai stockage |
+> | Alertes Telegram | **Jamais envoyées** à un vrai bot |
+>
+> La première installation sur le VPS est donc aussi le premier essai de Docker, de la sauvegarde et de Telegram. Les étapes 6 à 9 du § 5 les vérifient une à une ; en cas d'échec, voir le § 9.
 
 ---
 
@@ -21,17 +29,23 @@ Ce document permet à quelqu'un qui n'a pas écrit le code d'installer, de mettr
 /opt/ilomad-turf/
 ├── .env                      secrets et réglages (hors Git, droits 600)
 ├── docker/docker-compose.prod.yml
-└── data/                     tout l'état de l'application
-    ├── raw/AAAA/MM/JJ/       fichiers bruts et journaux du jour
-    └── etat/                 battement du collecteur, suspension, dernière sauvegarde
+└── data/
+    ├── raw/AAAA/MM/JJ/       fichiers bruts et journaux : la seule donnée à ne jamais perdre
+    └── etat/                 battement du collecteur, suspension, reprise, dernière sauvegarde
 ```
+
+La base PostgreSQL est dans un volume Docker (`ilomad-turf_base`). Elle se reconstruit depuis `data/raw/` : elle n'est pas sauvegardée.
 
 | Service | Commande | Rôle | Mémoire max | CPU max |
 |---------|----------|------|-------------|---------|
-| `collecteur` | `turf collect` | Suit le programme, prend les instantanés | 192 Mo | 0,25 |
+| `collecteur` | `turf collect` | Suit le programme, prend les instantanés, exécute la reprise d'historique | 192 Mo | 0,25 |
 | `surveillance` | `turf surveiller` | Alerte si le collecteur est muet ou le disque plein ; sauvegarde nocturne | 256 Mo | 0,25 |
+| `postgres` | PostgreSQL 17 | Base de travail | 512 Mo | 1,0 |
+| `ingestion` | `turf parse --en-continu` | Charge dans la base ce que le collecteur écrit, toutes les 5 minutes | 512 Mo | 1,0 |
 
-Aucun port n'est ouvert. Les deux services ne font que des appels sortants : vers le PMU, vers Telegram, vers le stockage de sauvegarde.
+Total des plafonds : 1 472 Mo. Aucun port n'est ouvert sur Internet ; PostgreSQL écoute sur `127.0.0.1:5440`, joignable par tunnel SSH.
+
+**Le collecteur ne dépend d'aucun autre service.** Base arrêtée, ingestion en panne, mise à jour en cours : il continue d'écrire sur disque, et l'ingestion rattrape ensuite.
 
 ---
 
@@ -39,8 +53,8 @@ Aucun port n'est ouvert. Les deux services ne font que des appels sortants : ver
 
 | Environnement | Où | Lancement | Usage |
 |---------------|-----|-----------|-------|
-| Local | Poste Windows | `.\.venv\Scripts\turf.exe collect --duree-min 30` | Développement, essais courts |
-| Production | VPS, `/opt/ilomad-turf/` | Docker Compose | Collecte permanente |
+| Local | Poste Windows | `.\.venv\Scripts\turf.exe …` | Développement, tests, essais courts |
+| Production | VPS, `/opt/ilomad-turf/` | Docker Compose | Collecte et ingestion permanentes |
 
 Ne jamais laisser tourner deux collecteurs en même temps, même sur deux machines : le plafond d'une requête par seconde vers le PMU vaut pour l'ensemble du projet.
 
@@ -73,6 +87,8 @@ Toutes les variables sont décrites dans [.env.example](../.env.example). En pro
 
 | Variable | Valeur en production | Obligatoire |
 |----------|----------------------|-------------|
+| `POSTGRES_PASSWORD` | Mot de passe de la base : `openssl rand -hex 24` | Oui |
+| `TURF_BASE_URL` | `postgresql+psycopg://turf:<mot de passe>@postgres:5432/turf` | Oui |
 | `TURF_TELEGRAM_JETON` | Jeton du bot | Oui |
 | `TURF_TELEGRAM_DISCUSSION` | Identifiant de discussion | Oui |
 | `TURF_SAUVEGARDE_DESTINATION` | `turf:<nom-du-seau>/ilomad-turf` | Recommandé |
@@ -82,6 +98,8 @@ Toutes les variables sont décrites dans [.env.example](../.env.example). En pro
 | `RCLONE_CONFIG_TURF_REGION` | Région du seau | Si sauvegarde |
 | `RCLONE_CONFIG_TURF_ACCESS_KEY_ID` | Identifiant de la clé | Si sauvegarde |
 | `RCLONE_CONFIG_TURF_SECRET_ACCESS_KEY` | Secret de la clé | Si sauvegarde |
+
+Le mot de passe figure deux fois : dans `POSTGRES_PASSWORD` et à l'intérieur de `TURF_BASE_URL`. Les deux doivent être identiques. Lettres et chiffres uniquement.
 
 Les autres réglages gardent leur valeur par défaut. `TURF_DONNEES` est imposé à `/data` par le fichier Compose.
 
@@ -103,7 +121,8 @@ cd /opt/ilomad-turf
 # 3. Créer la configuration
 cp .env.example .env
 chmod 600 .env
-nano .env          # renseigner les variables du § 4
+openssl rand -hex 24      # mot de passe de la base, à reporter deux fois dans .env
+nano .env                 # renseigner les variables du § 4
 
 # 4. Créer le dossier des données. Il doit appartenir à l'utilisateur 10001,
 #    celui sous lequel tournent les conteneurs.
@@ -122,7 +141,7 @@ docker compose -f docker/docker-compose.prod.yml run --rm collecteur turf collec
 # 8. Vérifier la sauvegarde (si configurée) : la commande ne doit rien afficher d'anormal
 docker compose -f docker/docker-compose.prod.yml run --rm surveillance rclone lsd turf:
 
-# 9. Démarrer
+# 9. Démarrer. La base est créée et mise à niveau par le service d'ingestion.
 docker compose -f docker/docker-compose.prod.yml up -d
 ```
 
@@ -155,17 +174,31 @@ git rev-parse --short HEAD
 # 2. Récupérer la nouvelle version
 git pull
 
-# 3. Construire AVANT d'arrêter quoi que ce soit : la collecte continue pendant ce temps
+# 3. Lire dans CHANGELOG.md si de nouvelles variables sont à ajouter à .env, et le faire
+nano .env
+
+# 4. Construire AVANT d'arrêter quoi que ce soit : la collecte continue pendant ce temps
 docker compose -f docker/docker-compose.prod.yml build
 
-# 4. Vérifier qu'aucun créneau n'est imminent : « prochaine_tache » donne la prochaine échéance (UTC)
+# 5. Vérifier qu'aucun créneau n'est imminent : « prochaine_tache » donne la prochaine échéance (UTC)
 cat data/etat/battement.json
 
-# 5. Basculer sur la nouvelle image
+# 6. Basculer sur la nouvelle image
 docker compose -f docker/docker-compose.prod.yml up -d
 ```
 
-Le collecteur s'arrête proprement, puis relit son journal au démarrage : les tâches déjà faites ne sont pas refaites.
+Le collecteur s'arrête proprement, puis relit son journal au démarrage : les tâches déjà faites ne sont pas refaites. Le service d'ingestion met la base à niveau en démarrant.
+
+### 6.1 Passer d'une installation du sprint 1 au sprint 2
+
+La mise à jour ajoute deux services, `postgres` et `ingestion`. Avant l'étape 6 ci-dessus, ajouter à `.env` :
+
+```bash
+POSTGRES_PASSWORD=<résultat de : openssl rand -hex 24>
+TURF_BASE_URL=postgresql+psycopg://turf:<le même mot de passe>@postgres:5432/turf
+```
+
+Relancer d'abord `scripts/etat_vps.sh` : les deux nouveaux services peuvent prendre jusqu'à 1 Go de mémoire de plus. Au premier démarrage, l'ingestion charge tout ce que le collecteur a déjà écrit.
 
 ---
 
@@ -187,6 +220,26 @@ docker compose -f docker/docker-compose.prod.yml up -d --build
 
 Les données ne sont jamais touchées par un retour arrière : les fichiers bruts sont en ajout seul, et leur format n'a pas de version.
 
+Si l'ancienne version refuse la base laissée par la nouvelle, reconstruire la base (§ 7.1) : elle ne contient rien qui ne se retrouve dans `data/raw/`.
+
+### 7.1 Reconstruire la base
+
+À utiliser après un retour arrière, une migration ratée ou un doute sur son contenu. La collecte n'est pas interrompue.
+
+```bash
+cd /opt/ilomad-turf
+
+# Arrêter l'ingestion et la base, supprimer le volume
+docker compose -f docker/docker-compose.prod.yml rm --stop --force ingestion postgres
+docker volume rm ilomad-turf_base
+
+# Relancer : la base est recréée, puis tout est relu depuis data/raw
+docker compose -f docker/docker-compose.prod.yml up -d
+docker compose -f docker/docker-compose.prod.yml logs -f ingestion
+```
+
+Durée : de l'ordre de 40 ms par document sur le poste de développement, soit quelques heures pour cinq ans de trot. Non mesuré sur le VPS.
+
 ---
 
 ## 8. Checklist après déploiement
@@ -194,7 +247,7 @@ Les données ne sont jamais touchées par un retour arrière : les fichiers brut
 ```bash
 cd /opt/ilomad-turf
 
-# Les deux services sont « Up »
+# Les quatre services sont « Up », postgres « healthy »
 docker compose -f docker/docker-compose.prod.yml ps
 
 # Le collecteur a démarré et consigne des tâches
@@ -206,23 +259,33 @@ cat data/etat/battement.json
 # Des fichiers bruts arrivent pour aujourd'hui
 ls data/raw/$(date +%Y/%m/%d) | head
 
+# L'ingestion a chargé des jours, sans anomalie
+docker compose -f docker/docker-compose.prod.yml logs --tail=20 ingestion
+
+# La base est conforme et son contenu cohérent
+docker compose -f docker/docker-compose.prod.yml exec ingestion turf migrate --verifier
+docker compose -f docker/docker-compose.prod.yml exec ingestion turf qualite
+
 # La consommation reste sous les plafonds
-docker stats --no-stream ilomad-turf-collecteur-1 ilomad-turf-surveillance-1
+docker stats --no-stream
 ```
 
-- [ ] `ps` : `collecteur` et `surveillance` à l'état `Up`
+- [ ] `ps` : quatre services à l'état `Up`, `postgres` marqué `healthy`
 - [ ] Journal du collecteur : ligne `collecte démarrée`, puis des lignes `… : faite`
 - [ ] `battement.json` : horodatage récent, `suspendue_jusqu_a` à `null`
 - [ ] Dossier du jour : `_documents.jsonl`, `_taches.jsonl`, sous-dossiers `R…C…`
-- [ ] Mémoire du collecteur sous 192 Mo
+- [ ] Journal de l'ingestion : `ingestion : N jours ingérés, … 0 anomalies`
+- [ ] `turf migrate --verifier` : `La base est conforme au schéma.`
+- [ ] `turf qualite` : aucune ligne `BLOQUANT`
+- [ ] Mémoire de chaque service sous son plafond
 - [ ] Les autres projets du VPS répondent toujours
 - [ ] Le lendemain vers 10 h : le bilan quotidien arrive sur Telegram
 
 ---
 
-## 9. Si la construction de l'image échoue
+## 9. Si quelque chose échoue à l'installation
 
-L'image n'a pas pu être essayée avant le premier déploiement. Les causes les plus probables :
+L'image et le fichier Compose n'ont pas pu être essayés avant le premier déploiement. Les causes les plus probables :
 
 | Message | Cause | Correction |
 |---------|-------|------------|
@@ -230,8 +293,13 @@ L'image n'a pas pu être essayée avant le premier déploiement. Les causes les 
 | `Unable to locate package rclone` | Dépôt Debian sans rclone | Retirer `rclone` de la ligne `apt-get install` ; la sauvegarde sera inopérante, le reste fonctionne |
 | `uv sync` : `lockfile needs to be updated` | `uv.lock` en retard sur `pyproject.toml` | Sur le poste local : `.\.venv\Scripts\uv.exe lock`, committer, pousser |
 | `Permission denied` sur `/data` au démarrage | Dossier `data` non attribué | `chown -R 10001:10001 data` |
+| `postgres` ne devient pas `healthy` | `POSTGRES_PASSWORD` vide dans `.env` | Le renseigner, puis `docker compose … up -d` |
+| Ingestion : `password authentication failed` | Mot de passe différent dans `POSTGRES_PASSWORD` et `TURF_BASE_URL`, ou modifié après la création de la base | Les aligner. Le mot de passe est fixé à la création du volume : pour en changer, reconstruire la base (§ 7.1) |
+| Ingestion : `TURF_BASE_URL n'est pas définie` | Variable absente de `.env` | L'ajouter (§ 4) |
 
-En attendant la correction, le collecteur peut tourner sans Docker sur n'importe quelle machine disposant de Python 3.13 :
+**Une panne de la base ou de l'ingestion n'arrête pas la collecte.** Si seuls ces deux services posent problème, laisser tourner `collecteur` et `surveillance` et corriger sans urgence : rien n'est perdu.
+
+En dernier recours, le collecteur peut tourner sans Docker sur n'importe quelle machine disposant de Python 3.13 :
 
 ```bash
 python -m venv .venv && .venv/bin/pip install .
@@ -245,11 +313,11 @@ TURF_DONNEES=data .venv/bin/turf collect
 ```bash
 cd /opt/ilomad-turf
 
-# Arrêt des services. Les données restent dans data/.
+# Arrêt des services. Les données restent dans data/, la base dans son volume.
 docker compose -f docker/docker-compose.prod.yml down
 ```
 
-Ne jamais supprimer `data/raw/` sans avoir vérifié la sauvegarde : les cotes avant course ne peuvent pas être recollectées.
+Ne jamais supprimer `data/raw/` sans avoir vérifié la sauvegarde : les cotes avant course ne peuvent pas être recollectées. Ne pas ajouter `-v` à `down` par habitude : l'option supprime la base, qu'il faut ensuite plusieurs heures pour reconstruire.
 
 ---
 
@@ -260,7 +328,8 @@ Ne jamais supprimer `data/raw/` sans avoir vérifié la sauvegarde : les cotes a
 | Serveur | VPS partagé avec agedor-services, pointage, bajaj |
 | Répertoire | `/opt/ilomad-turf/` |
 | Accès | SSH, compte `root` |
-| Ports ouverts | Aucun |
+| Ports | Aucun ouvert sur Internet. `127.0.0.1:5440` : PostgreSQL |
+| Accès à la base depuis un poste | `ssh -L 5440:127.0.0.1:5440 root@<hote>`, puis `postgresql://turf:<mot de passe>@127.0.0.1:5440/turf` |
 | Journaux | `docker compose … logs`, 5 fichiers de 10 Mo par service |
-| Sauvegarde | Chaque nuit à 3 h 30 (Paris), `data/raw/` vers le stockage S3 |
+| Sauvegarde | Chaque nuit à 3 h 30 (Paris), `data/raw/` vers le stockage S3. La base n'est pas sauvegardée : elle se reconstruit |
 | Ce qu'il ne faut pas toucher | Le Caddy système et les autres dossiers de `/opt/` |

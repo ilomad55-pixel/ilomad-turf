@@ -1,8 +1,9 @@
 # Spécification de la source PMU (API turfinfo)
 
-> **Version** : 1.1 | **Date** : 12/10/2026 | **Statut** : à valider par Olivier (critère de sortie du sprint 0)
+> **Version** : 1.2 | **Date** : 13/10/2026 | **Statut** : à valider par Olivier (critère de sortie du sprint 0)
 > **Origine des chiffres** : spike du 10/10/2026, [rapport JSON](./spike/rapport-spike-source-pmu.json), rejouable avec `python scripts\spike_source_pmu.py`
 > **Correction de la version 1.1** : la version 1.0 affirmait qu'aucune réponse ne venait d'un cache. C'est faux pour 2 réponses sur 2 505 ; voir § 4.9 et § 6.5.
+> **Ajouts de la version 1.2**, issus de l'ingestion de données réelles : unités de la réduction kilométrique (§ 4.10), mises détaillées pour 12 chevaux seulement (§ 4.11), cotes de référence incomplètes en points de vente (§ 4.12), cotes d'avant course trompeuses sur une course étrangère (§ 10.1).
 
 Ce document est la référence pour quiconque écrit du code qui parle au PMU ou qui lit ses réponses. Il dit ce que la source renvoie **réellement**, mesures à l'appui, et ce que cela change pour le projet.
 
@@ -24,7 +25,7 @@ Quatre découvertes que le plan n'avait pas prévues :
 1. **Dans l'historique, `dernierRapportDirect` est la cote finale**, datée après le départ prévu dans 333 courses sur 334. C'est une fuite si on l'utilise comme variable.
 2. **Il existe quatre cotes par cheval** (deux masses, deux instants), pas une. Voir [ADR 0004](./adr/0004-deux-masses-de-paris.md).
 3. **`idCheval` vaut `NOM-MÈRE-PÈRE`**, et ces trois champs existent sur tout l'historique. Le rapprochement des chevaux se réduit à reconstruire cette clé.
-4. **Le détail des mises par cheval est disponible** (`combinaisons`), y compris sur le passé. Il donne la probabilité exacte du marché, sans l'arrondi des cotes.
+4. **Le détail des mises par cheval est disponible** (`combinaisons`), y compris sur le passé, pour les 12 chevaux les plus joués (§ 4.11). Il donne leur probabilité de marché exacte, sans l'arrondi des cotes.
 
 ---
 
@@ -145,6 +146,26 @@ Mesure sur l'essai réel du collecteur, le 12/10/2026 (367 réponses en 45 minut
 | `rapports-definitifs` | 29 sur 92 | 56 secondes |
 
 Pour les ressources qui portent les cotes, le retard dû au cache est donc de quelques secondes au plus sur cet essai. `turf couverture` le remesure chaque jour : réponses servies par le cache et âge maximal.
+
+### 4.10 Deux unités pour la réduction kilométrique
+
+La réduction kilométrique est en **millisecondes** dans `participants` (`73200` : 1'13"2) et en **centièmes de seconde** dans `performances-detaillees` (`7470` : 1'14"7). `tempsDuPremier` y est aussi en centièmes. La base garde les deux, avec l'unité dans le nom de la colonne.
+
+### 4.11 Les mises ne sont détaillées que pour 12 chevaux
+
+`combinaisons` liste au plus 12 lignes par pari, les plus jouées. Dans un peloton de 15, les trois chevaux les moins joués n'ont pas de mise détaillée : seule leur somme se déduit du total. Les favoris, pour qui l'arrondi des cotes pèse le plus, sont toujours dans la liste.
+
+### 4.12 En points de vente, la cote de référence manque sur les réunions régionales
+
+Relevé sur les arrivées du 12/10/2026 :
+
+| Réunions | Internet | Points de vente |
+|----------|----------|-----------------|
+| Nationales en France | 347 partants sur 347 | 347 sur 347 |
+| Régionales en France | 84 sur 84 | **32 sur 84** |
+| Étrangères | 90 sur 96 | 0 sur 96 |
+
+La cote directe, elle, existe pour tous les partants des réunions françaises dans les deux masses. Ce constat pèse sur le choix de la référence de marché ([ADR 0004](./adr/0004-deux-masses-de-paris.md)) : sur les réunions régionales, seule la masse internet donne une cote de référence à chaque cheval.
 
 ---
 
@@ -378,6 +399,8 @@ Première année : 1,6 Go de reprise, 1,5 Go de collecte, plus la base PostgreSQ
 | Durée de la reprise | 10 à 14 nuits | 9 nuits pour le trot en France, 23 pour tout | Trot en France d'abord, le reste en tâche de fond |
 | Réponse 204, masse absente | Non prévu | Normal avant course et sur certaines réunions | Enregistrer sans alerte |
 | Heure d'une donnée | Heure de collecte | Une réponse peut sortir d'un cache, vieille de plusieurs minutes | Conserver `age` et `x-cache` ; heure de la donnée = collecte − `age` |
+| Référence de marché | « La cote » | En points de vente, cote de référence absente pour 62 % des partants des réunions régionales | Élément de plus pour l'ADR 0004 : sur ces réunions, seule la masse internet est complète |
+| Rapprochement des chevaux | Table d'alias prévue | Aucun doublon ni confusion sur 4 402 partants de 2021 à 2026 | Table d'alias reportée ; `turf qualite` surveille |
 
 ---
 
@@ -438,6 +461,8 @@ Ce que cet essai établit :
 3. **Sur ces trois courses, le créneau H-2 tombait en réalité à 5, 7 et 8 minutes du départ.** Les instantanés de suivi ont capté deux à trois points de plus avant la fermeture des paris.
 4. **La cote de référence est datée de H-30 exactement** (22:00:00, 22:15:00, 22:30:00), comme dans l'historique.
 5. Aucune cote en points de vente sur ces réunions étrangères de nuit, comme observé le 10/10.
+
+6. **Sur une course étrangère, la cote d'avant course peut n'avoir aucun rapport avec la cote finale.** Sur R6C11 (Argentine), les neuf cotes sont restées identiques de H-15 à S+7, alors que leur horodatage avançait ; la cote finale, datée quatre minutes plus tard, est tout autre : le n° 1 passe de 6,9 à 22,0. Sur R5C6 (Chili), au contraire, les cotes ont bougé à chaque photo et la dernière est bien la cote finale. À surveiller sur le trot français dès les premiers jours de collecte.
 
 Limite : trois courses, toutes étrangères, toutes de plat. **Aucune course de trot française n'a encore été observée en direct.**
 

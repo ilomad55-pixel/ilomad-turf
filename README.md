@@ -2,7 +2,7 @@
 
 > Application personnelle qui calcule des probabilités calibrées pour les courses de trot et les mesure contre la cote PMU. Python, PostgreSQL, Streamlit.
 
-**Statut** : sprint 1 (collecte brute) — version 0.2.0
+**Statut** : sprint 2 (reprise d'historique, base, ingestion) — version 0.3.0
 **Usage** : strictement personnel. Aucune donnée PMU ne doit sortir de l'application.
 
 ---
@@ -20,7 +20,7 @@ Pour y répondre honnêtement, l'application :
 
 Le verdict (go/no-go) est rendu à la fin du sprint 4, sur 12 mois de courses que le modèle n'a jamais vues.
 
-**Où en est-on.** L'étape 1 est écrite : le collecteur suit le programme du jour et stocke chaque réponse de la source telle quelle. Les étapes 2 à 4 viennent aux sprints suivants.
+**Où en est-on.** L'étape 1 est écrite : le collecteur suit le programme du jour, stocke chaque réponse de la source telle quelle, et peut rapatrier cinq ans d'historique. Une base PostgreSQL met ces fichiers en forme. Les étapes 2 à 4 viennent aux sprints suivants.
 
 ---
 
@@ -33,6 +33,7 @@ Le verdict (go/no-go) est rendu à la fin du sprint 4, sur 12 mois de courses qu
 | Suivre le calendrier et les sprints | [docs/PLAN-REALISATION.md](./docs/PLAN-REALISATION.md) |
 | Comprendre les choix techniques | [docs/ARCHITECTURE-TECHNIQUE.md](./docs/ARCHITECTURE-TECHNIQUE.md) et [docs/adr/](./docs/adr/) |
 | Travailler avec l'API du PMU | [docs/SPEC-SOURCE-PMU.md](./docs/SPEC-SOURCE-PMU.md) |
+| Écrire une requête ou une variable de modèle | [docs/MODELE-DONNEES.md](./docs/MODELE-DONNEES.md) |
 | **Installer ou mettre à jour en production** | [docs/PLAN-DEPLOIEMENT.md](./docs/PLAN-DEPLOIEMENT.md) |
 | **Réagir à une alerte** | [docs/EXPLOITATION.md](./docs/EXPLOITATION.md) |
 | Relire le raisonnement d'origine | [docs/analyse/ILOMAD-TURF.txt](./docs/analyse/ILOMAD-TURF.txt) |
@@ -47,7 +48,7 @@ Le verdict (go/no-go) est rendu à la fin du sprint 4, sur 12 mois de courses qu
 | Collecte | httpx, fichiers bruts compressés sur disque | Oui |
 | Alertes et sauvegarde | Telegram, rclone vers un stockage S3 | Oui |
 | Déploiement | Docker Compose sur VPS | Oui |
-| Base de données | PostgreSQL 17 | Sprint 2 |
+| Base de données | PostgreSQL 17, SQLAlchemy, migrations Alembic | Oui |
 | Modèles | scikit-learn, LightGBM, statsmodels | Sprint 4 |
 | Interface | Streamlit | Sprint 3 |
 
@@ -108,6 +109,31 @@ Toutes les commandes se lancent depuis la racine du projet.
 
 **Un seul collecteur à la fois**, toutes machines confondues : le plafond d'une requête par seconde vers le PMU vaut pour l'ensemble du projet. Ne pas lancer d'essai local pendant que la production collecte.
 
+### Base et ingestion
+
+Ces commandes ont besoin de `TURF_BASE_URL`, l'adresse d'une base PostgreSQL.
+
+```powershell
+$env:TURF_BASE_URL = "postgresql+psycopg://turf@127.0.0.1:5440/turf"
+
+# Créer ou mettre à niveau les tables ; --verifier ne change rien et dit si la base est conforme
+.\.venv\Scripts\turf.exe migrate
+.\.venv\Scripts\turf.exe migrate --verifier
+
+# Charger dans la base ce qui est nouveau dans data\raw
+.\.venv\Scripts\turf.exe parse
+
+# Relire un jour depuis le début (après correction d'un lecteur), ou tout reconstruire
+.\.venv\Scripts\turf.exe parse --date 2026-10-12
+.\.venv\Scripts\turf.exe parse --rejouer
+
+# Contrôler la base : ce qui manque, ce qui est incohérent
+.\.venv\Scripts\turf.exe qualite
+.\.venv\Scripts\turf.exe qualite --debut 2026-10-01 --fin 2026-10-31
+```
+
+La base ne contient rien qui ne soit dans `data/raw` : `parse --rejouer` la reconstruit à l'identique.
+
 ### Tests et qualité
 
 ```powershell
@@ -117,6 +143,18 @@ Toutes les commandes se lancent depuis la racine du projet.
 ```
 
 Les tests rejouent une journée complète de collecte avec une source et une horloge simulées : ils ne font aucun appel réseau.
+
+**Tests de la base.** Une vingtaine de tests chargent trois jours de données réelles dans un vrai PostgreSQL. Ils sont **ignorés** tant que `TURF_TEST_BASE_URL` n'est pas définie ; pytest l'indique par `19 skipped`. Pour les lancer, démarrer une base jetable dont le nom contient « test » (les tests la vident) :
+
+```powershell
+docker run --rm -d --name turf-test -p 127.0.0.1:5440:5432 `
+  -e POSTGRES_USER=turf -e POSTGRES_DB=turf_test -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17
+$env:TURF_TEST_BASE_URL = "postgresql+psycopg://turf@127.0.0.1:5440/turf_test"
+.\.venv\Scripts\python.exe -m pytest -q
+docker stop turf-test
+```
+
+Sans Docker, n'importe quel PostgreSQL 16 ou 17 convient, avec la même variable.
 
 ### Après avoir modifié les dépendances
 
@@ -155,28 +193,37 @@ ilomad-turf/
 ├── README.md  CHANGELOG.md  .env.example  pyproject.toml  uv.lock
 ├── docker/
 │   ├── Dockerfile                image unique, une commande par service
-│   └── docker-compose.prod.yml   collecteur et surveillance
+│   └── docker-compose.prod.yml   collecteur, surveillance, base, ingestion
 ├── docs/
 │   ├── BRIEF.md  CAHIER-DES-CHARGES.md  PLAN-REALISATION.md
-│   ├── ARCHITECTURE-TECHNIQUE.md  SPEC-SOURCE-PMU.md
+│   ├── ARCHITECTURE-TECHNIQUE.md  SPEC-SOURCE-PMU.md  MODELE-DONNEES.md
 │   ├── PLAN-DEPLOIEMENT.md  EXPLOITATION.md
 │   ├── adr/                      décisions d'architecture, une par fichier
 │   ├── analyse/                  analyse initiale du projet
 │   └── spike/                    rapport chiffré du spike
 ├── scripts/                      outils du sprint 0
 ├── src/turf/
-│   ├── cli.py                    commandes : collect, couverture, backfill, surveiller, alerte-test
+│   ├── cli.py                    une commande par étape : collect, backfill, parse, qualite…
 │   ├── config.py                 toute la configuration, lue dans l'environnement
 │   ├── alertes.py                Telegram
 │   ├── surveillance.py           collecteur muet, disque, sauvegarde nocturne
-│   └── collecte/
-│       ├── client_pmu.py         débit plafonné, reprises, arrêt sur refus
-│       ├── planificateur.py      du programme aux tâches (fonctions pures)
-│       ├── collecteur.py         la boucle
-│       ├── reprise.py            reprise d'historique, en tâche de fond du collecteur
-│       ├── stockage_brut.py      fichiers bruts et journaux
-│       └── couverture.py         bilan quotidien
-├── tests/                        dont fixtures/ : extraits réels de réponses
+│   ├── collecte/
+│   │   ├── client_pmu.py         débit plafonné, reprises, arrêt sur refus
+│   │   ├── planificateur.py      du programme aux tâches (fonctions pures)
+│   │   ├── collecteur.py         la boucle
+│   │   ├── reprise.py            reprise d'historique, en tâche de fond du collecteur
+│   │   ├── stockage_brut.py      fichiers bruts et journaux
+│   │   └── couverture.py         bilan quotidien
+│   ├── db/
+│   │   ├── schema.py             toutes les tables, en un seul endroit
+│   │   ├── session.py            connexion, migrations
+│   │   └── migrations/           révisions Alembic, embarquées dans le paquet
+│   └── ingestion/
+│       ├── analyse.py            d'une réponse JSON à des lignes (fonctions pures)
+│       ├── chargement.py         des lignes à la base, sans doublon
+│       ├── pilote.py             quels jours lire ; service d'ingestion en continu
+│       └── qualite.py            contrôles de cohérence
+├── tests/                        dont fixtures/raw : trois jours réels, anonymisés
 └── data/                         fichiers bruts, état, cache — jamais dans Git
 ```
 
@@ -204,6 +251,8 @@ ilomad-turf/
 | Le serveur est perdu | [docs/EXPLOITATION.md § 6](./docs/EXPLOITATION.md#6-restaurer-après-la-perte-du-vps) |
 | `Dossier des données brutes non inscriptible` au démarrage | Sur le VPS : `chown -R 10001:10001 data` |
 | `Configuration invalide : …` au démarrage | Corriger la variable nommée dans `.env`, d'après [.env.example](./.env.example) |
+| L'ingestion signale des documents illisibles | [docs/EXPLOITATION.md § 4.10](./docs/EXPLOITATION.md#4-que-faire-quand-une-alerte-arrive) |
+| La base est abîmée ou douteuse | La reconstruire : [docs/PLAN-DEPLOIEMENT.md § 7.1](./docs/PLAN-DEPLOIEMENT.md#71-reconstruire-la-base) |
 
 ---
 

@@ -11,6 +11,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from turf import __version__
+
 # Plafond du projet : jamais plus d'une requête par seconde vers le PMU.
 # Une valeur plus basse dans l'environnement est ignorée.
 INTERVALLE_PLANCHER_S = 1.0
@@ -61,6 +63,9 @@ def _plage(nom: str, valeur: str) -> tuple[tuple[int, int], tuple[int, int]] | N
 class Parametres:
     dossier_donnees: Path
     niveau_journal: str
+    # Adresse de la base PostgreSQL. Le collecteur n'en a pas besoin (ADR 0005).
+    base_url: str | None
+    ingestion_intervalle_s: int
 
     pmu_url_base: str
     pmu_intervalle_s: float
@@ -108,6 +113,10 @@ class Parametres:
         return cls(
             dossier_donnees=Path(lire("TURF_DONNEES", "data")),
             niveau_journal=lire("TURF_JOURNAL_NIVEAU", "INFO").upper(),
+            base_url=optionnel("TURF_BASE_URL"),
+            ingestion_intervalle_s=_nombre(
+                "TURF_INGESTION_INTERVALLE_S", lire("TURF_INGESTION_INTERVALLE_S", "300"), int
+            ),
             pmu_url_base=lire(
                 "TURF_PMU_URL_BASE", "https://online.turfinfo.api.pmu.fr/rest/client/7"
             ).rstrip("/"),
@@ -116,7 +125,8 @@ class Parametres:
                 _nombre("TURF_PMU_INTERVALLE_S", lire("TURF_PMU_INTERVALLE_S", "1.0"), float),
             ),
             pmu_user_agent=lire(
-                "TURF_PMU_USER_AGENT", "ilomad-turf/0.2 (usage personnel, faible debit)"
+                "TURF_PMU_USER_AGENT",
+                f"ilomad-turf/{__version__} (usage personnel, faible debit)",
             ),
             pmu_delai_s=_nombre("TURF_PMU_DELAI_S", lire("TURF_PMU_DELAI_S", "20"), float),
             pmu_pause_refus_s=_nombre(

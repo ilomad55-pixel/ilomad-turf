@@ -169,3 +169,57 @@ def parametres(tmp_path: Path) -> Parametres:
             "TURF_SAUVEGARDE_DESTINATION": "turf:seau-de-test",
         }
     )
+
+
+# ------------------------------------------------------------- base de données
+
+FIXTURES_BRUTES = FIXTURES / "raw"
+
+
+@pytest.fixture(scope="session")
+def moteur_de_test():
+    """Base PostgreSQL de test, remise à neuf une fois par session.
+
+    Ces tests sont ignorés si TURF_TEST_BASE_URL n'est pas définie. La base est
+    vidée et recréée : par sécurité, son nom doit contenir « test ».
+    """
+    import os
+
+    from sqlalchemy import create_engine, make_url, text
+
+    from turf.db.session import migrer
+
+    adresse = os.environ.get("TURF_TEST_BASE_URL")
+    if not adresse:
+        pytest.skip("TURF_TEST_BASE_URL non définie : tests de base de données ignorés")
+    if "test" not in (make_url(adresse).database or ""):
+        pytest.exit("TURF_TEST_BASE_URL doit désigner une base dont le nom contient « test »", 2)
+    moteur = create_engine(adresse)
+    with moteur.begin() as connexion:
+        for schema in ("core", "raw"):
+            connexion.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
+        connexion.execute(text("DROP TABLE IF EXISTS alembic_version"))
+    migrer(moteur)
+    yield moteur
+    moteur.dispose()
+
+
+@pytest.fixture
+def base(moteur_de_test):
+    """La base de test, tables vides."""
+    from turf.ingestion.chargement import vider
+
+    with moteur_de_test.begin() as connexion:
+        vider(connexion)
+    return moteur_de_test
+
+
+@pytest.fixture
+def brut(tmp_path: Path):
+    """Copie jetable des trois jours de données brutes réelles (voir tests/fixtures/raw)."""
+    import shutil
+
+    from turf.collecte.stockage_brut import StockageBrut
+
+    shutil.copytree(FIXTURES_BRUTES, tmp_path / "raw")
+    return StockageBrut(tmp_path / "raw")

@@ -5,12 +5,34 @@
 
 ## [Non publié]
 
+### À faire lors de la mise à jour d'une installation existante
+
+- Ajouter à `.env` : `POSTGRES_PASSWORD` et `TURF_BASE_URL` (voir `.env.example` et le § 6.1 du plan de déploiement).
+- Relancer `scripts/etat_vps.sh` : deux services de plus, jusqu'à 1 Go de mémoire.
+
 ### Ajouté — sprint 2, reprise d'historique
 
 - Ajouter la reprise d'historique, exécutée par le collecteur en tâche de fond : une requête à la fois quand rien n'est dû en direct, plage horaire réglable, reprise après arrêt, périmètres `trot-france`, `trot` et `tout` enchaînables sans rien redemander.
 - Ajouter la commande `turf backfill` pour demander, suivre ou retirer une reprise.
 - Ajouter l'avancement de la reprise au bilan quotidien et au fichier de battement.
 - Ajouter la décision d'architecture 0006 : la reprise est exécutée par le collecteur.
+
+### Ajouté — sprint 2, base et ingestion
+
+- Ajouter le schéma PostgreSQL (`raw`, `core`) et sa migration initiale, embarquée dans le paquet ; commande `turf migrate`.
+- Ajouter l'ingestion des fichiers bruts : programmes, partants, photos de cotes sur les deux masses, enjeux et mises, résultats, rapports définitifs, performances détaillées ; commande `turf parse`.
+- Ajouter le rapprochement des chevaux par la clé `NOM-MÈRE-PÈRE` et celui des drivers et entraîneurs par leur nom.
+- Ajouter l'ingestion en continu (`turf parse --en-continu`), avec alerte sur document illisible ou base injoignable.
+- Ajouter la relecture d'un jour (`turf parse --date`) et le rejeu complet (`turf parse --rejouer`).
+- Ajouter dix contrôles de qualité, dont le seuil bloquant de 1 % de chevaux non rapprochés ; commande `turf qualite`.
+- Ajouter les services `postgres` et `ingestion` au fichier Compose de production.
+- Ajouter le document `MODELE-DONNEES.md`.
+
+### Modifié — sprint 2
+
+- Modifier la spécification de la source : unités de la réduction kilométrique, mises détaillées pour 12 chevaux seulement, cotes de référence incomplètes en points de vente sur les réunions régionales.
+- Modifier le plan de déploiement et le guide d'exploitation pour la base et l'ingestion.
+- Passer la version à 0.3.0.
 
 ### Ajouté — sprint 1, collecte brute
 

@@ -43,6 +43,12 @@ Mesures sur 64 courses de trot réparties de 2021 à 2026 (détail dans [SPEC-SO
 - La reprise d'historique est plus longue : voir le dimensionnement dans la spécification de la source.
 - Le détail des mises (`combinaisons`) manque pour environ 10 % des courses : la probabilité du marché s'y calcule à partir des cotes, arrondies.
 
+## Élément nouveau du 13/10/2026
+
+L'ingestion des arrivées du 12/10/2026 montre que la cote de référence des points de vente n'existe pas pour tous les chevaux : complète sur les réunions nationales (347 partants sur 347), elle manque pour 52 partants sur 84 sur les réunions régionales. La masse internet, elle, en donne une à chaque partant des réunions françaises.
+
+Une référence de marché « cote de référence des points de vente » serait donc inutilisable sur une partie du trot. C'est un argument pour la masse internet, à confirmer sur les cinq ans au sprint 3.
+
 ## Point d'attention pour le go/no-go
 
 Au pari mutuel, un pari est payé à la **cote finale**, pas à la cote vue 30 minutes avant. Sur l'échantillon, la cote finale est nettement meilleure que la cote de référence (log-perte inférieure de 0,07 à 0,13). Battre la cote de référence est donc plus facile que battre le marché auquel on est réellement payé.
