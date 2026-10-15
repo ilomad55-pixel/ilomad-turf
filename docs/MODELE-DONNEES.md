@@ -1,6 +1,6 @@
 # Modèle de données — ILOMAD-TURF
 
-> **Version** : 1.1 | **Date** : 13/10/2026 | **Base** : PostgreSQL 17
+> **Version** : 1.2 | **Date** : 15/10/2026 | **Base** : PostgreSQL 17
 > **Source de vérité du schéma** : [src/turf/db/schema.py](../src/turf/db/schema.py). Ce document l'explique ; en cas de désaccord, le code a raison.
 
 Ce document sert à qui écrit une requête ou une variable de modèle. Il dit ce que contient chaque table, dans quelle unité, et surtout **ce qui était connu avant la course et ce qui ne l'était pas**.
@@ -166,6 +166,23 @@ C'est la seule trace des courses courues hors du flux PMU (un tiers du trot fran
 | `raw.ingestion` | Jusqu'où l'ingestion a lu chaque jour, et combien de documents elle n'a pas su lire | `date_programme` |
 
 `ligne` est le rang dans le journal du jour (`_documents.jsonl`, `_taches.jsonl`). Une même tâche peut avoir plusieurs lignes si la course a été reportée : la plus récente fait foi.
+
+### 4.11 Schéma `ml` — pronostics
+
+Seul schéma qui ne vient pas de `data/raw` : il recopie le journal `data/pronostics`, qui fait foi ([ADR 0009](./adr/0009-journal-des-pronostics.md)). `turf parse --rejouer` ne le touche pas.
+
+| Table | Contenu | Clé |
+|-------|---------|-----|
+| `ml.modele_version` | Une ligne par modèle qui a pronostiqué : nom, masse, dernier jour appris, empreinte du fichier, fiche complète | `version` |
+| `ml.prediction` | Un pronostic par partant, créneau (H-30, H-5) et version : probabilités du modèle seul, du marché, combinée, de finir dans les trois premiers ; cote vue et son horodatage ; facteurs | `id` ; unique sur (version, jour, réunion, course, numéro, créneau) |
+
+Garanties posées par la base :
+
+- **ajout seul** : un déclencheur refuse `UPDATE` et `DELETE` (EF-18) ;
+- **antérieur au départ** : contrainte `cree_le < depart_prevu` ;
+- **version obligatoire** : clé étrangère vers `ml.modele_version` (EF-19).
+
+Les partants sont désignés par (jour, réunion, course, numéro), pas par `core.partant.id`, qui change à chaque reconstruction.
 
 ---
 

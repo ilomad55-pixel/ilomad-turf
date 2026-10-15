@@ -7,7 +7,7 @@ import streamlit as st
 from turf.app import ressources
 from turf.app.ressources import heure, part
 from turf.horloge import Horloge, jour_de_programme
-from turf.services import marche, programme
+from turf.services import marche, programme, pronostics
 
 _MASSES = {"OFFLINE": "Points de vente", "INTERNET": "Internet"}
 _NATURES = {
@@ -83,8 +83,11 @@ def afficher() -> None:
             ),
         )
         fiche = marche.fiche(connexion, choisie.course_id)
+        version, du_modele = pronostics.de_la_course(
+            connexion, jour, choisie.reunion, choisie.numero
+        )
     if fiche is not None:
-        _afficher_fiche(fiche)
+        _afficher_fiche(fiche, version, du_modele)
 
 
 def _lisible(code: str | None) -> str | None:
@@ -101,7 +104,11 @@ def _prix(libelle: str | None) -> str:
     return " ".join((libelle or "").split())
 
 
-def _afficher_fiche(fiche: marche.Fiche) -> None:
+def _afficher_fiche(
+    fiche: marche.Fiche,
+    version: str | None = None,
+    du_modele: dict[str, dict[int, pronostics.Pronostic]] | None = None,
+) -> None:
     course = fiche.course
     st.subheader(f"{course.cle} — {_prix(course.libelle)}")
     st.caption(
@@ -126,6 +133,19 @@ def _afficher_fiche(fiche: marche.Fiche) -> None:
                 "Les probabilités, calculées sur eux seuls, sont surestimées."
             )
 
+    # Le pronostic le plus récent : H-5 s'il existe, sinon H-30.
+    creneau = next((c for c in ("H-5", "H-30") if c in (du_modele or {})), None)
+    modele = du_modele[creneau] if creneau else {}
+    if creneau:
+        emis = min(p.cree_le for p in modele.values())
+        st.markdown(
+            f"**Modèle** {version}, pronostic {creneau} émis à {heure(emis, secondes=True)}."
+        )
+        st.warning(
+            "Modèle en essai : ses probabilités servent à l'analyse. Aucune mise réelle avant "
+            "le go/no-go (docs/adr/0008)."
+        )
+
     st.dataframe(
         [
             {
@@ -142,16 +162,43 @@ def _afficher_fiche(fiche: marche.Fiche) -> None:
                     if masse in fiche.masses
                     for titre, valeur in _cote(ligne.cotes.get(masse))
                 },
+                **(_colonnes_modele(modele.get(ligne.numero)) if creneau else {}),
                 "Arrivée": _arrivee(ligne),
             }
             for ligne in fiche.lignes
         ],
         hide_index=True,
     )
+    if creneau:
+        st.caption(
+            "Modèle : probabilité de victoire du modèle combiné à la cote. Cote juste : la cote "
+            "à laquelle un pari serait neutre si cette probabilité est juste. Espérance : gain "
+            "moyen par euro misé à la cote vue au moment du pronostic. Facteurs : les variables "
+            "qui écartent le plus ce cheval de ses adversaires (+ pousse, − retient)."
+        )
     st.caption(
         "Probabilité du marché : inverse de la cote, ramené à une somme de 100 % sur la course "
         "(modèle 0). C'est l'avis des parieurs, prélèvement retiré."
     )
+
+
+def _colonnes_modele(pronostic: pronostics.Pronostic | None) -> dict:
+    if pronostic is None:
+        return dict.fromkeys(("Modèle (%)", "Cote juste", "Espérance (%)", "Top 3 (%)", "Facteurs"))
+    return {
+        "Modèle (%)": round(100 * pronostic.p_combine, 1),
+        "Cote juste": round(pronostic.cote_juste, 1),
+        "Espérance (%)": None
+        if pronostic.esperance is None
+        else round(100 * pronostic.esperance, 1),
+        "Top 3 (%)": None
+        if pronostic.p_dans_les_3 is None
+        else round(100 * pronostic.p_dans_les_3, 1),
+        "Facteurs": " · ".join(
+            f"{e['variable']} {e['effet']:+.2f}".replace(".", ",")
+            for e in pronostic.explication[:2]
+        ),
+    }
 
 
 def _cote(cote: marche.Cote | None) -> list[tuple[str, float | None]]:

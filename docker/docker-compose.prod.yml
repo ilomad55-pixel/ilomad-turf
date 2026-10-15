@@ -106,6 +106,19 @@ services:
     mem_limit: 384m
     cpus: 0.5
 
+  # Pronostique les courses de trot du jour à H-30 et H-5 avec le modèle actif
+  # (data/models/actif.txt). Écrit son journal dans data/pronostics, puis dans la base.
+  # N'interroge pas la source : seulement la base et le disque.
+  inference:
+    <<: *service
+    command: ["turf", "pronostiquer", "--en-continu"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Le calcul des variables du jour relit tout l'historique : environ 1 Go au pic.
+    mem_limit: 1g
+    cpus: 0.5
+
   # Commandes ponctuelles et gourmandes : export Parquet, rapport de référence.
   # Ne démarre pas avec « up ». Usage :
   #   docker compose -f docker/docker-compose.prod.yml run --rm outils turf export

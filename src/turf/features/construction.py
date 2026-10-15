@@ -114,6 +114,42 @@ VARIABLES: tuple[Variable, ...] = (
     ),
 )
 valider(VARIABLES)
+# Colonnes de la table des partants que `construire` lit : on ne charge qu'elles.
+COLONNES = (
+    "partant_id",
+    "course_id",
+    "date_programme",
+    "depart_prevu",
+    "pays",
+    "specialite",
+    "categorie_particularite",
+    "distance_m",
+    "numero",
+    "cheval_id",
+    "driver_id",
+    "entraineur_id",
+    "age",
+    "sexe",
+    "statut",
+    "deferre",
+    "avis_entraineur",
+    "partant_distance_m",
+    "place_corde",
+    "inedit",
+    "driver_change",
+    "musique",
+    "courses",
+    "victoires",
+    "places",
+    "gains_carriere_cts",
+    "gains_annee_cts",
+    "cote_finale_offline",
+    "cote_finale_internet",
+    "resultat_course_statut",
+    "resultat_place",
+    "resultat_statut",
+    "resultat_reduction_km_ms",
+)
 NOMS = tuple(f"v_{v.nom}" for v in VARIABLES)
 """Noms des colonnes de variables : « v_ » + nom, pour ne jamais masquer une colonne source."""
 

@@ -196,7 +196,7 @@ def moteur_de_test():
         pytest.exit("TURF_TEST_BASE_URL doit désigner une base dont le nom contient « test »", 2)
     moteur = create_engine(adresse)
     with moteur.begin() as connexion:
-        for schema in ("core", "raw"):
+        for schema in ("ml", "core", "raw"):
             connexion.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
         connexion.execute(text("DROP TABLE IF EXISTS alembic_version"))
     migrer(moteur)
@@ -207,10 +207,14 @@ def moteur_de_test():
 @pytest.fixture
 def base(moteur_de_test):
     """La base de test, tables vides."""
+    from sqlalchemy import text
+
     from turf.ingestion.chargement import vider
 
     with moteur_de_test.begin() as connexion:
         vider(connexion)
+        # L'ingestion ne vide jamais les pronostics : on le fait ici.
+        connexion.execute(text("TRUNCATE ml.prediction, ml.modele_version"))
     return moteur_de_test
 
 

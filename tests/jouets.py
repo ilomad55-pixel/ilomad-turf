@@ -84,3 +84,28 @@ def table(*courses: list[dict]) -> pl.DataFrame:
     return pl.DataFrame(
         [{nom: ligne.get(nom) for nom in schema} for ligne in lignes], schema=schema
     )
+
+
+def historique(jusqu_au: date, graine: int = 5) -> pl.DataFrame:
+    """Une course tous les deux jours depuis janvier 2024 : huit chevaux, pris dans un
+    groupe de quarante qui reviennent, cotes et arrivées tirées au hasard."""
+    import numpy as np
+
+    alea = np.random.default_rng(graine)
+    courses = []
+    jour, course_id = date(2024, 1, 1), 0
+    while jour <= jusqu_au:
+        course_id += 1
+        chevaux = alea.choice(40, size=8, replace=False).tolist()
+        cotes = np.round(alea.uniform(1.5, 30, size=8), 1).tolist()
+        places = (alea.permutation(8) + 1).tolist()
+        courses.append(course(course_id, jour, cotes, chevaux=chevaux, places=places))
+        jour += timedelta(days=2)
+    return table(*courses)
+
+
+def ecrire_parquet(donnees: pl.DataFrame, dossier) -> None:
+    """Un fichier par année, comme `turf export`."""
+    dossier.mkdir(parents=True, exist_ok=True)
+    for (annee,), morceau in donnees.group_by(donnees["date_programme"].dt.year()):
+        morceau.write_parquet(dossier / f"partants-{annee}.parquet")

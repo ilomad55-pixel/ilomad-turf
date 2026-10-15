@@ -138,24 +138,35 @@ class Surveillance:
         self._sauvegarder(aujourd_hui.isoformat(), maintenant)
 
     def _sauvegarder(self, jour: str, maintenant: datetime) -> None:
-        destination = f"{self.parametres.sauvegarde_destination.rstrip('/')}/raw"
-        # « copy » et non « sync » : la sauvegarde ne supprime jamais rien à distance.
-        commande = ["rclone", "copy", str(self.parametres.dossier_brut), destination]
-        journal.info("sauvegarde vers %s", destination)
-        try:
-            resultat = self._lancer(
-                commande, capture_output=True, text=True, timeout=DELAI_SAUVEGARDE_S
+        # Ce qui ne se reconstruit pas : les fichiers bruts, le journal des pronostics et
+        # les modèles. La base, elle, se reconstruit depuis eux : elle n'est pas copiée.
+        dossiers = [("raw", self.parametres.dossier_brut)] + [
+            (nom, chemin)
+            for nom, chemin in (
+                ("pronostics", self.parametres.dossier_pronostics),
+                ("models", self.parametres.dossier_modeles),
             )
-            erreur = None if resultat.returncode == 0 else (resultat.stderr or "")[-400:]
-        except (OSError, subprocess.TimeoutExpired) as e:
-            erreur = repr(e)
-        if erreur is not None:
-            self.alerteur.envoyer(
-                "sauvegarde-echec",
-                f"La sauvegarde vers {destination} a échoué : {erreur.strip()} "
-                "Nouvel essai dans une heure. Voir docs/EXPLOITATION.md § 4.6.",
-            )
-            return
+            if chemin.exists()
+        ]
+        for nom, chemin in dossiers:
+            destination = f"{self.parametres.sauvegarde_destination.rstrip('/')}/{nom}"
+            # « copy » et non « sync » : la sauvegarde ne supprime jamais rien à distance.
+            commande = ["rclone", "copy", str(chemin), destination]
+            journal.info("sauvegarde vers %s", destination)
+            try:
+                resultat = self._lancer(
+                    commande, capture_output=True, text=True, timeout=DELAI_SAUVEGARDE_S
+                )
+                erreur = None if resultat.returncode == 0 else (resultat.stderr or "")[-400:]
+            except (OSError, subprocess.TimeoutExpired) as e:
+                erreur = repr(e)
+            if erreur is not None:
+                self.alerteur.envoyer(
+                    "sauvegarde-echec",
+                    f"La sauvegarde vers {destination} a échoué : {erreur.strip()} "
+                    "Nouvel essai dans une heure. Voir docs/EXPLOITATION.md § 4.6.",
+                )
+                return
         self._ecrire_derniere_sauvegarde(jour, maintenant)
         journal.info("sauvegarde terminée")
 

@@ -66,6 +66,9 @@ class Parametres:
     # Adresse de la base PostgreSQL. Le collecteur n'en a pas besoin (ADR 0005).
     base_url: str | None
     ingestion_intervalle_s: int
+    # Attente après un instantané H-30 ou H-5 avant de pronostiquer : le temps que
+    # l'ingestion charge les cotes qu'il vient de prendre.
+    inference_delai_s: int
 
     pmu_url_base: str
     pmu_intervalle_s: float
@@ -97,6 +100,14 @@ class Parametres:
     def dossier_etat(self) -> Path:
         return self.dossier_donnees / "etat"
 
+    @property
+    def dossier_modeles(self) -> Path:
+        return self.dossier_donnees / "models"
+
+    @property
+    def dossier_pronostics(self) -> Path:
+        return self.dossier_donnees / "pronostics"
+
     @classmethod
     def depuis_environnement(cls, env: Mapping[str, str] | None = None) -> Parametres:
         env = os.environ if env is None else env
@@ -115,7 +126,10 @@ class Parametres:
             niveau_journal=lire("TURF_JOURNAL_NIVEAU", "INFO").upper(),
             base_url=optionnel("TURF_BASE_URL"),
             ingestion_intervalle_s=_nombre(
-                "TURF_INGESTION_INTERVALLE_S", lire("TURF_INGESTION_INTERVALLE_S", "300"), int
+                "TURF_INGESTION_INTERVALLE_S", lire("TURF_INGESTION_INTERVALLE_S", "60"), int
+            ),
+            inference_delai_s=_nombre(
+                "TURF_INFERENCE_DELAI_S", lire("TURF_INFERENCE_DELAI_S", "120"), int
             ),
             pmu_url_base=lire(
                 "TURF_PMU_URL_BASE", "https://online.turfinfo.api.pmu.fr/rest/client/7"

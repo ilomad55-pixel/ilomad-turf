@@ -160,21 +160,7 @@ def test_le_rapport_redige(avec_signal):
 
 
 def _historique_simule(dossier, jusqu_au: date) -> None:
-    """Une course tous les deux jours depuis janvier 2024, huit chevaux qui reviennent."""
-    alea = np.random.default_rng(5)
-    courses = []
-    jour, course_id = date(2024, 1, 1), 0
-    while jour <= jusqu_au:
-        course_id += 1
-        chevaux = alea.choice(40, size=8, replace=False).tolist()
-        cotes = np.round(alea.uniform(1.5, 30, size=8), 1).tolist()
-        places = (alea.permutation(8) + 1).tolist()
-        courses.append(jouets.course(course_id, jour, cotes, chevaux=chevaux, places=places))
-        jour += timedelta(days=2)
-    table = jouets.table(*courses)
-    dossier.mkdir(parents=True, exist_ok=True)
-    for (annee,), morceau in table.group_by(table["date_programme"].dt.year()):
-        morceau.write_parquet(dossier / f"partants-{annee}.parquet")
+    jouets.ecrire_parquet(jouets.historique(jusqu_au), dossier)
 
 
 @pytest.fixture

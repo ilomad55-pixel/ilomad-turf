@@ -49,6 +49,11 @@ class ModeleLogit:
     def probabilites(self, x: np.ndarray, course: np.ndarray) -> np.ndarray:
         return self.logit.probabilites(self.preparation.transformer(x), course)
 
+    def contributions(self, x: np.ndarray, course: np.ndarray) -> tuple[np.ndarray, tuple]:
+        """Ce que chaque variable ajoute au score du partant, par rapport à ses adversaires."""
+        z = self.preparation.transformer(x)
+        return _centrer(z, course) * self.logit.poids, self.preparation.noms_sortie
+
     def poids(self) -> dict[str, float]:
         """Effet d'un écart-type de chaque variable sur le log-avantage du partant."""
         return dict(zip(self.preparation.noms_sortie, self.logit.poids.tolist(), strict=True))
@@ -94,11 +99,24 @@ class ModeleClassement:
     def probabilites(self, x: np.ndarray, course: np.ndarray) -> np.ndarray:
         return softmax_par_course(self.booster.predict(x), course)
 
+    def contributions(self, x: np.ndarray, course: np.ndarray) -> tuple[np.ndarray, tuple]:
+        """Valeurs de Shapley de LightGBM, rapportées à la moyenne de la course."""
+        shapley = self.booster.predict(x, pred_contrib=True)[:, :-1]
+        return _centrer(shapley, course), self.noms
+
     def importances(self) -> dict[str, float]:
         """Part du gain apporté par chaque variable, en pour un."""
         gains = self.booster.feature_importance(importance_type="gain")
         total = gains.sum() or 1.0
         return dict(zip(self.noms, (gains / total).tolist(), strict=True))
+
+
+def _centrer(valeurs: np.ndarray, course: np.ndarray) -> np.ndarray:
+    """Retire à chaque partant la moyenne de sa course : seul l'écart aux adversaires compte."""
+    debuts = debuts_de_course(course)
+    effectifs = np.diff(np.r_[debuts, len(course)])
+    moyennes = np.add.reduceat(valeurs, debuts, axis=0) / effectifs[:, None]
+    return valeurs - moyennes[course]
 
 
 def fabriquer(nom: str, noms: tuple[str, ...]) -> ModeleLogit | ModeleClassement:

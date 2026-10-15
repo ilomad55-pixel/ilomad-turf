@@ -6,15 +6,17 @@ import streamlit as st
 
 from turf.app import ressources
 from turf.app.ressources import jour_et_heure, part
-from turf.horloge import Horloge
-from turf.services import sante
+from turf.horloge import Horloge, jour_de_programme
+from turf.services import pronostics, sante
 
 
 def afficher() -> None:
     st.title("Santé de la collecte")
     parametres = ressources.parametres()
+    maintenant = Horloge().maintenant()
     with ressources.moteur().connect() as connexion:
-        etat = sante.lire(connexion, parametres, Horloge().maintenant())
+        etat = sante.lire(connexion, parametres, maintenant)
+        inference = pronostics.etat(connexion, parametres, jour_de_programme(maintenant))
 
     collecteur, couverture, base, historique = st.columns(4)
     if etat.collecteur is None:
@@ -74,6 +76,25 @@ def afficher() -> None:
             f"{etat.ingestion.jours_avec_anomalies} jours ont au moins un document que "
             "l'ingestion n'a pas su lire. Détail : `turf qualite`."
         )
+
+    st.subheader("Pronostics du jour")
+    modele, trente, cinq, dernier = st.columns(4)
+    modele.metric("Modèle actif", inference.version_active or "aucun")
+    trente.metric(
+        "Courses pronostiquées à H-30", f"{inference.faites['H-30']} / {inference.courses_du_jour}"
+    )
+    cinq.metric(
+        "Courses pronostiquées à H-5", f"{inference.faites['H-5']} / {inference.courses_du_jour}"
+    )
+    dernier.metric("Dernier pronostic", jour_et_heure(inference.dernier_pronostic))
+    if inference.version_active is None:
+        st.warning(
+            "Aucun modèle actif : le service d'inférence attend. Voir docs/EXPLOITATION.md § 8.6."
+        )
+    st.caption(
+        "Les courses dont le départ n'est pas encore passé ne sont pas en retard : le "
+        "pronostic H-30 part deux minutes après l'instantané de H-30."
+    )
 
     st.subheader("Couverture par jour")
     if etat.couverture:

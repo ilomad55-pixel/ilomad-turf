@@ -9,11 +9,12 @@ import streamlit as st
 from sqlalchemy.exc import OperationalError
 
 from turf import __version__
-from turf.app import page_programme, page_sante
+from turf.app import page_performance, page_programme, page_sante
 from turf.config import ConfigurationInvalide
 
 PAGES = {
     "Programme et marché": page_programme.afficher,
+    "Performance du modèle": page_performance.afficher,
     "Santé de la collecte": page_sante.afficher,
 }
 

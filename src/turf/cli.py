@@ -14,6 +14,9 @@ turf evaluate                   mesure les cotes : rapport de référence du mar
 turf reglage                    compare les modèles au marché, sur la période de réglage
 turf decide                     ouvre le test gelé, une seule fois : rapport de go/no-go
 turf places                     probabilités de place (Plackett-Luce) contre les arrivées
+turf train                      entraîne le modèle de production, versionné
+turf modele                     liste les modèles, active celui qui pronostique
+turf pronostiquer               pronostics du jour à H-30 et H-5 (service)
 turf app                        lance l'application
 """
 
@@ -43,9 +46,11 @@ from turf.evaluation import decision, echantillon, places, reference
 from turf.evaluation.jeu import preparer
 from turf.evaluation.periodes import REGLAGE, TEST_GELE
 from turf.horloge import PARIS, Horloge, jour_de_programme
+from turf.inference.service import ServiceInference, recharger
 from turf.ingestion import qualite as controles
 from turf.ingestion.pilote import ServiceIngestion, ingerer
 from turf.journalisation import configurer
+from turf.modeles import artefact as artefacts
 from turf.surveillance import Surveillance
 
 app = typer.Typer(
@@ -78,7 +83,9 @@ def _jour(valeur: str | None, horloge: Horloge) -> date:
         raise typer.BadParameter(f"date attendue au format AAAA-MM-JJ, reçu « {valeur} »") from e
 
 
-def _arret_sur_signal(service: Collecteur | Surveillance | ServiceIngestion) -> None:
+def _arret_sur_signal(
+    service: Collecteur | Surveillance | ServiceIngestion | ServiceInference,
+) -> None:
     def arreter(*_: object) -> None:
         service.demander_arret()
 
@@ -535,6 +542,130 @@ def probabilites_de_place(
             f"{_fr(m['erreur_de_calibration'], '.4f')}"
         )
     typer.echo(f"Rapport : {chemin}")
+
+
+@app.command()
+def train(
+    masse: Annotated[
+        str, typer.Option("--masse", help="Masse de la cote combinée : INTERNET ou OFFLINE.")
+    ],
+    modele: Annotated[str, typer.Option("--modele", help="logit ou classement.")],
+    jusqu_au: Annotated[
+        str | None,
+        typer.Option(
+            "--jusqu-au",
+            help="Dernier jour appris, AAAA-MM-JJ (défaut : le plus récent permis).",
+        ),
+    ] = None,
+    parquet: OptionParquet = None,
+    sortie: Annotated[
+        Path | None,
+        typer.Option("--sortie", help="Dossier des modèles (défaut : <données>/models)."),
+    ] = None,
+) -> None:
+    """Entraîne le modèle de production et l'écrit sous une version.
+
+    Tant que le test gelé n'est pas ouvert (`turf decide`), l'apprentissage
+    s'arrête au dernier jour du réglage.
+    """
+    parametres = _parametres()
+    horloge = Horloge()
+    masse = masse.upper()
+    if masse not in MASSES:
+        raise typer.BadParameter(f"masses connues : {', '.join(MASSES)}")
+    if modele not in decision.fondamental.MODELES:
+        raise typer.BadParameter(f"modèles connus : {', '.join(decision.fondamental.MODELES)}")
+    test_ouvert = (parametres.dossier_etat / decision.FICHIER_OUVERTURE).exists()
+    jeu = preparer(_partants(parametres, parquet))
+    dernier = jeu.lignes["date_programme"].max()
+    if dernier is None:
+        typer.echo("Aucune course à apprendre.", err=True)
+        raise typer.Exit(1)
+    limite = dernier if test_ouvert else min(dernier, REGLAGE[1])
+    jour = _jour(jusqu_au, horloge) if jusqu_au else limite
+    if not test_ouvert and jour >= TEST_GELE[0]:
+        raise typer.BadParameter(
+            f"le test gelé n'est pas ouvert : l'apprentissage s'arrête au {REGLAGE[1]} au plus"
+        )
+    try:
+        modele_entraine = artefacts.entrainer(
+            jeu, modele, masse, jour, horloge.maintenant().astimezone(PARIS)
+        )
+    except (artefacts.ArtefactInvalide, decision.PeriodeInvalide) as e:
+        typer.echo(f"Entraînement impossible : {e}.", err=True)
+        raise typer.Exit(1) from e
+    dossier = artefacts.sauver(modele_entraine, sortie or parametres.dossier_modeles)
+    m = modele_entraine.metriques
+    typer.echo(
+        f"Modèle {modele_entraine.version} : {m['courses_apprentissage']} courses apprises "
+        f"jusqu'au {jour}, combinaison calée sur {m['courses_calage']} courses "
+        f"(alpha {_fr(modele_entraine.combinaison.alpha, '.3f')}, "
+        f"bêta {_fr(modele_entraine.combinaison.beta, '.3f')})."
+    )
+    typer.echo(f"Écrit dans {dossier}")
+    typer.echo(f"Pour l'activer : turf modele --activer {modele_entraine.version}")
+
+
+@app.command("modele")
+def modele_actif(
+    activer: Annotated[
+        str | None, typer.Option("--activer", help="Version qui pronostiquera désormais.")
+    ] = None,
+) -> None:
+    """Liste les modèles de data/models et dit lequel est actif ; en active un autre."""
+    parametres = _parametres()
+    if activer:
+        try:
+            artefacts.activer(parametres.dossier_modeles, activer)
+        except artefacts.ArtefactInvalide as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(1) from e
+        typer.echo(f"Modèle actif : {activer}. Le service d'inférence le charge dans la minute.")
+        return
+    actif = artefacts.version_active(parametres.dossier_modeles)
+    fiches = artefacts.lister(parametres.dossier_modeles)
+    if not fiches:
+        typer.echo(f"Aucun modèle dans {parametres.dossier_modeles}.")
+        raise typer.Exit(1)
+    for fiche in fiches:
+        marque = "*" if fiche["version"] == actif else " "
+        typer.echo(
+            f"{marque} {fiche['version']:<42} appris jusqu'au {fiche['entraine_jusqu_au']}, "
+            f"créé le {fiche['cree_le'][:10]}"
+        )
+    if actif is None:
+        typer.echo("Aucun modèle actif : turf modele --activer <version>.")
+
+
+@app.command()
+def pronostiquer(
+    en_continu: Annotated[
+        bool, typer.Option("--en-continu", help="Tourne en service, jusqu'à l'arrêt.")
+    ] = False,
+    recharger_journal: Annotated[
+        bool,
+        typer.Option("--recharger", help="Recopie le journal des pronostics dans la base."),
+    ] = False,
+) -> None:
+    """Pronostique les courses de trot du jour à H-30 et H-5 (EF-22).
+
+    Sans option : un seul tour, utile pour vérifier. --en-continu : le service.
+    """
+    parametres = _parametres()
+    moteur = _moteur(parametres)
+    if recharger_journal:
+        session.migrer(moteur)
+        typer.echo(f"{recharger(moteur, parametres)} pronostics recopiés dans la base.")
+        return
+    horloge = Horloge()
+    service = ServiceInference(moteur, parametres, Alerteur(parametres, horloge), horloge)
+    if en_continu:
+        session.migrer(moteur)
+        _arret_sur_signal(service)
+        service.executer()
+        return
+    attente = service.pas()
+    typer.echo(f"Tour fait. Prochain tour utile dans {attente:.0f} s.")
 
 
 @app.command("app")

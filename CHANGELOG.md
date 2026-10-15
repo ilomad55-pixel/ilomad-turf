@@ -8,8 +8,24 @@
 ### À faire lors de la mise à jour d'une installation existante
 
 - Depuis le sprint 1 : ajouter à `.env` `POSTGRES_PASSWORD` et `TURF_BASE_URL` (voir `.env.example` et le § 6.1 du plan de déploiement).
+- Depuis le sprint 5 : un service de plus, `inference` (1 Go). Si `.env` fixe `TURF_INGESTION_INTERVALLE_S=300`, le passer à 60. Suivre le § 6.3 du plan de déploiement.
 - Depuis le sprint 3 : rien à ajouter à `.env`, rien de nouveau à déployer ; l'image grossit de LightGBM. Les sprints 4 et 5 ne touchent que des commandes lancées sur le poste.
 - Depuis le sprint 2 : rien à ajouter à `.env`. Un service de plus, `app` (384 Mo, port `127.0.0.1:8510`) : relancer `scripts/etat_vps.sh` avant, puis suivre le § 6.2 du plan de déploiement.
+
+### Ajouté — sprint 6, inférence et application complète
+
+- Ajouter le modèle de production versionné : `turf train` (combinaison calée sur l'année précédente, exposants de place), empreinte sha256 vérifiée au chargement, `turf modele` pour lister et activer. Apprentissage arrêté au 30/09/2025 tant que le test gelé n'est pas ouvert.
+- Ajouter le service d'inférence (`turf pronostiquer --en-continu`) : chaque course de trot en France pronostiquée à H-30 et H-5, deux minutes après l'instantané de cotes du même nom.
+- Ajouter le journal des pronostics `data/pronostics/AAAA/MM/JJ.jsonl`, qui fait foi, et le schéma `ml` : versions de modèle et pronostics, en ajout seul (déclencheur), antérieurs au départ (contrainte), rattachés à leur version (clé étrangère).
+- Ajouter à la page course la probabilité du modèle, la cote juste, l'espérance, la chance de finir dans les trois premiers et les facteurs qui comptent le plus.
+- Ajouter la page « Performance du modèle » et l'état de l'inférence sur la page santé.
+- Ajouter le service `inference` au fichier Compose ; la sauvegarde nocturne copie aussi `data/pronostics` et `data/models`.
+- Ajouter la décision d'architecture 0009 et la checklist de livraison.
+
+### Modifié — sprint 6
+
+- Passer l'intervalle d'ingestion par défaut de 5 minutes à 1 minute : les pronostics attendent les cotes fraîches.
+- Passer la version à 0.7.0.
 
 ### Ajouté — sprint 5, probabilités des paris
 

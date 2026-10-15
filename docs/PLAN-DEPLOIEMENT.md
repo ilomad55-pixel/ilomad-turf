@@ -10,7 +10,8 @@ Ce document permet à quelqu'un qui n'a pas écrit le code d'installer, de mettr
 >
 > | Élément | État |
 > |---------|------|
-> | Code | 281 tests, dont une journée de collecte simulée, l'ingestion sur un vrai PostgreSQL, l'application pilotée sans navigateur et le protocole de décision sur des mondes simulés |
+> | Code | 317 tests, dont une journée de collecte simulée, l'ingestion sur un vrai PostgreSQL, l'application pilotée sans navigateur, le protocole de décision sur des mondes simulés et l'inférence sur une course réelle |
+> | Inférence | Vérifiée sur une course réelle rejouée en local. Service `inference` **jamais lancé dans Docker** ; mémoire mesurée sur cinq ans simulés : 1 Go au pic |
 > | Collecteur | A tourné 45 minutes contre la vraie source, puis redémarré sans rien refaire |
 > | Ingestion | Vérifiée sur 17 jours réels de 2021 à 2026 : 0 document illisible, contrôles de qualité au vert |
 > | Reprise d'historique | **Jamais lancée contre la vraie source.** Vérifiée par simulation seulement |
@@ -33,21 +34,24 @@ Ce document permet à quelqu'un qui n'a pas écrit le code d'installer, de mettr
 ├── docker/docker-compose.prod.yml
 └── data/
     ├── raw/AAAA/MM/JJ/       fichiers bruts et journaux : la seule donnée à ne jamais perdre
-    └── etat/                 battement du collecteur, suspension, reprise, dernière sauvegarde
+    ├── etat/                 battement du collecteur, suspension, reprise, dernière sauvegarde
+    ├── models/<version>/     modèles de production ; actif.txt désigne celui qui pronostique
+    └── pronostics/AAAA/MM/   journal des pronostics : ne se reconstruit pas, sauvegardé
 ```
 
-La base PostgreSQL est dans un volume Docker (`ilomad-turf_base`). Elle se reconstruit depuis `data/raw/` : elle n'est pas sauvegardée.
+La base PostgreSQL est dans un volume Docker (`ilomad-turf_base`). Elle se reconstruit depuis `data/raw/` et `data/pronostics/` : elle n'est pas sauvegardée.
 
 | Service | Commande | Rôle | Mémoire max | CPU max |
 |---------|----------|------|-------------|---------|
 | `collecteur` | `turf collect` | Suit le programme, prend les instantanés, exécute la reprise d'historique | 192 Mo | 0,25 |
 | `surveillance` | `turf surveiller` | Alerte si le collecteur est muet ou le disque plein ; sauvegarde nocturne | 256 Mo | 0,25 |
 | `postgres` | PostgreSQL 17 | Base de travail | 512 Mo | 1,0 |
-| `ingestion` | `turf parse --en-continu` | Charge dans la base ce que le collecteur écrit, toutes les 5 minutes | 512 Mo | 1,0 |
+| `ingestion` | `turf parse --en-continu` | Charge dans la base ce que le collecteur écrit, chaque minute | 512 Mo | 1,0 |
+| `inference` | `turf pronostiquer --en-continu` | Pronostique les courses de trot à H-30 et H-5 avec le modèle actif | 1 Go | 0,5 |
 | `app` | `turf app` | Application : programme, marché, santé de la collecte. Lecture seule | 384 Mo | 0,5 |
 | `outils` | à la demande | Export Parquet et rapport de référence. Ne tourne que le temps d'une commande (`run --rm`) | 1 Go | 1,0 |
 
-Total des plafonds permanents : 1 856 Mo, plus 1 Go le temps d'une commande `outils`. Aucun port n'est ouvert sur Internet ; PostgreSQL écoute sur `127.0.0.1:5440` et l'application sur `127.0.0.1:8510`, joignables par tunnel SSH (§ 11).
+Total des plafonds permanents : 2 880 Mo, plus 1 Go le temps d'une commande `outils`. L'inférence n'atteint son plafond qu'au recalcul des variables, au plus une fois par heure. Aucun port n'est ouvert sur Internet ; PostgreSQL écoute sur `127.0.0.1:5440` et l'application sur `127.0.0.1:8510`, joignables par tunnel SSH (§ 11).
 
 **Le collecteur ne dépend d'aucun autre service.** Base arrêtée, ingestion en panne, mise à jour en cours : il continue d'écrire sur disque, et l'ingestion rattrape ensuite.
 
@@ -235,6 +239,25 @@ ssh -L 8510:127.0.0.1:8510 root@<hote>
 
 Si `app` ne démarre pas, la collecte et l'ingestion ne sont pas touchées : corriger sans urgence (§ 9).
 
+### 6.3 Passer d'une installation du sprint 3 au sprint 6
+
+La mise à jour ajoute le service `inference` et le schéma `ml` (créé par l'ingestion au démarrage).
+
+```bash
+cd /opt/ilomad-turf
+
+# Avant : 1 Go de plus au pic. Lire la ligne « mémoire disponible ».
+TURF_VPS_RAM_MIN_MO=1100 bash scripts/etat_vps.sh
+
+# Si .env fixe l'ingestion à 5 minutes, la passer à 1 minute
+grep -n TURF_INGESTION_INTERVALLE_S .env
+sed -i 's/^TURF_INGESTION_INTERVALLE_S=.*/TURF_INGESTION_INTERVALLE_S=60/' .env
+
+# Puis la mise à jour habituelle (§ 6, étapes 1 à 6)
+```
+
+Sans modèle actif, le service `inference` tourne à vide et envoie une alerte par jour (« Aucun modèle actif »). Pour en mettre un : [EXPLOITATION.md § 8.6](./EXPLOITATION.md#86-mettre-un-modèle-en-production).
+
 ---
 
 ## 7. Retour arrière
@@ -282,7 +305,7 @@ Durée : de l'ordre de 40 ms par document sur le poste de développement, soit q
 ```bash
 cd /opt/ilomad-turf
 
-# Les cinq services sont « Up », postgres « healthy »
+# Les six services sont « Up », postgres « healthy »
 docker compose -f docker/docker-compose.prod.yml ps
 
 # Le collecteur a démarré et consigne des tâches
@@ -308,7 +331,8 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8510/_stcore/health
 docker stats --no-stream
 ```
 
-- [ ] `ps` : cinq services à l'état `Up`, `postgres` marqué `healthy`
+- [ ] `ps` : six services à l'état `Up` (collecteur, surveillance, postgres, ingestion, inference, app), `postgres` marqué `healthy`
+- [ ] Journal de l'inférence : `modèle actif : …`, puis `R…C… H-30 : N partants pronostiqués` à l'approche des courses (ou l'alerte « Aucun modèle actif » si aucun n'est encore activé)
 - [ ] Application : `curl` affiche `200` ; par le tunnel SSH, la page « Santé de la collecte » indique « En marche »
 - [ ] Journal du collecteur : ligne `collecte démarrée`, puis des lignes `… : faite`
 - [ ] `battement.json` : horodatage récent, `suspendue_jusqu_a` à `null`
@@ -337,7 +361,7 @@ L'image et le fichier Compose n'ont pas pu être essayés avant le premier dépl
 | Ingestion : `TURF_BASE_URL n'est pas définie` | Variable absente de `.env` | L'ajouter (§ 4) |
 | `app` : `Bind for 127.0.0.1:8510 failed: port is already allocated` | Un autre projet occupe le port | Dans `docker/docker-compose.prod.yml`, remplacer le premier `8510` de `127.0.0.1:8510:8510` par un port libre ; adapter le tunnel SSH |
 | `app` redémarre en boucle, `PermissionError` sur un dossier `.streamlit` | Streamlit n'a pas pu écrire ses réglages | Vérifier que `HOME: /tmp` est bien dans le service `app` du fichier Compose |
-| `app` ou `outils` arrêté par le système (`OOMKilled` dans `docker inspect`) | Plafond de mémoire trop bas | Relever `mem_limit` du service, après avoir vérifié la mémoire libre du VPS |
+| `inference`, `app` ou `outils` arrêté par le système (`OOMKilled` dans `docker inspect`) | Plafond de mémoire trop bas | Relever `mem_limit` du service, après avoir vérifié la mémoire libre du VPS |
 
 **Une panne de la base, de l'ingestion ou de l'application n'arrête pas la collecte.** Si seuls ces services posent problème, laisser tourner `collecteur` et `surveillance` et corriger sans urgence : rien n'est perdu.
 

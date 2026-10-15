@@ -2,7 +2,7 @@
 
 > Application personnelle qui calcule des probabilités calibrées pour les courses de trot et les mesure contre la cote PMU. Python, PostgreSQL, Streamlit.
 
-**Statut** : sprint 5 (probabilités des paris, paris fictifs) — version 0.6.0
+**Statut** : sprint 6 (inférence automatique, journal de pronostics, application complète) — version 0.7.0
 **Usage** : strictement personnel. Aucune donnée PMU ne doit sortir de l'application.
 
 ---
@@ -20,7 +20,7 @@ Pour y répondre honnêtement, l'application :
 
 Le verdict (go/no-go) est rendu à la fin du sprint 4, sur 12 mois de courses que le modèle n'a jamais vues.
 
-**Où en est-on.** L'étape 1 est écrite : le collecteur suit le programme du jour, stocke chaque réponse de la source telle quelle, et peut rapatrier cinq ans d'historique. Une base PostgreSQL met ces fichiers en forme. La barre à franchir est mesurée : `turf evaluate` dit ce que valent les cotes seules, et une application montre le programme, le marché et la santé de la collecte. Le modèle v1 et le protocole de décision sont écrits : `turf reglage` les compare au marché, `turf decide` rendra le verdict, une seule fois, quand les cinq ans d'historique seront chargés. Les probabilités de chaque type de pari (Trio, Quarté, Quinté…) se déduisent des probabilités de victoire, et `turf places` vérifie qu'elles collent aux arrivées. Le journal de pronostics (étape 3) vient au sprint 6.
+**Où en est-on.** L'étape 1 est écrite : le collecteur suit le programme du jour, stocke chaque réponse de la source telle quelle, et peut rapatrier cinq ans d'historique. Une base PostgreSQL met ces fichiers en forme. La barre à franchir est mesurée : `turf evaluate` dit ce que valent les cotes seules, et une application montre le programme, le marché et la santé de la collecte. Le modèle v1 et le protocole de décision sont écrits : `turf reglage` les compare au marché, `turf decide` rendra le verdict, une seule fois, quand les cinq ans d'historique seront chargés. Les probabilités de chaque type de pari (Trio, Quarté, Quinté…) se déduisent des probabilités de victoire, et `turf places` vérifie qu'elles collent aux arrivées. Les étapes 2 et 3 sont automatiques : le service `inference` pronostique chaque course de trot à H-30 et H-5 avec le modèle actif, et l'écrit dans un journal qu'on ne peut pas réécrire. L'étape 4 est la page « Performance du modèle ».
 
 ---
 
@@ -36,6 +36,7 @@ Le verdict (go/no-go) est rendu à la fin du sprint 4, sur 12 mois de courses qu
 | Écrire une requête ou une variable de modèle | [docs/MODELE-DONNEES.md](./docs/MODELE-DONNEES.md) |
 | **Installer ou mettre à jour en production** | [docs/PLAN-DEPLOIEMENT.md](./docs/PLAN-DEPLOIEMENT.md) |
 | **Réagir à une alerte** | [docs/EXPLOITATION.md](./docs/EXPLOITATION.md) |
+| Savoir ce qui reste à faire avant de dire « livré » | [docs/CHECKLIST-LIVRAISON.md](./docs/CHECKLIST-LIVRAISON.md) |
 | Relire le raisonnement d'origine | [docs/analyse/ILOMAD-TURF.txt](./docs/analyse/ILOMAD-TURF.txt) |
 
 ---
@@ -174,6 +175,22 @@ Le rapport écarte toujours les courses du 01/10/2025 au 30/09/2026 : c'est le t
 
 Protocole et critères : [docs/adr/0008](./docs/adr/0008-protocole-de-decision.md).
 
+### Modèle de production et pronostics
+
+```powershell
+# Entraîne le modèle de production (s'arrête au 30/09/2025 tant que le test n'est pas ouvert)
+.\.venv\Scripts\turf.exe train --masse INTERNET --modele logit --parquet data\parquet
+
+# Liste les modèles, en active un
+.\.venv\Scripts\turf.exe modele
+.\.venv\Scripts\turf.exe modele --activer logit-internet-20250930-1a2b3c4d
+
+# Un tour d'inférence ; --en-continu pour le service
+.\.venv\Scripts\turf.exe pronostiquer
+```
+
+Procédure complète, du poste au VPS : [EXPLOITATION.md § 8.6](./docs/EXPLOITATION.md#86-mettre-un-modèle-en-production). Pourquoi le journal fait foi : [ADR 0009](./docs/adr/0009-journal-des-pronostics.md).
+
 ```powershell
 # Probabilités de finir dans les 2 ou 3 premiers, contre les arrivées observées.
 # Écrit data\rapports\places-AAAA-MM-JJ.md et .json
@@ -190,7 +207,7 @@ Protocole et critères : [docs/adr/0008](./docs/adr/0008-protocole-de-decision.m
 
 Les tests rejouent une journée complète de collecte avec une source et une horloge simulées : ils ne font aucun appel réseau.
 
-**Tests de la base.** 45 tests chargent trois jours de données réelles dans un vrai PostgreSQL, et pilotent l'application sans navigateur. Ils sont **ignorés** tant que `TURF_TEST_BASE_URL` n'est pas définie ; pytest l'indique par `45 skipped`. Pour les lancer, démarrer une base jetable dont le nom contient « test » (les tests la vident) :
+**Tests de la base.** 54 tests chargent trois jours de données réelles dans un vrai PostgreSQL, et pilotent l'application sans navigateur. Ils sont **ignorés** tant que `TURF_TEST_BASE_URL` n'est pas définie ; pytest l'indique par `54 skipped`. Pour les lancer, démarrer une base jetable dont le nom contient « test » (les tests la vident) :
 
 ```powershell
 docker run --rm -d --name turf-test -p 127.0.0.1:5440:5432 `
@@ -239,7 +256,7 @@ ilomad-turf/
 ├── README.md  CHANGELOG.md  .env.example  pyproject.toml  uv.lock
 ├── docker/
 │   ├── Dockerfile                image unique, une commande par service
-│   └── docker-compose.prod.yml   collecteur, surveillance, base, ingestion, application
+│   └── docker-compose.prod.yml   collecteur, surveillance, base, ingestion, inférence, application
 ├── docs/
 │   ├── BRIEF.md  CAHIER-DES-CHARGES.md  PLAN-REALISATION.md
 │   ├── ARCHITECTURE-TECHNIQUE.md  SPEC-SOURCE-PMU.md  MODELE-DONNEES.md
@@ -279,8 +296,10 @@ ilomad-turf/
 │   │   ├── logit_conditionnel.py le logit des courses, par la méthode de Newton
 │   │   ├── fondamental.py        les deux modèles sans cote : logit, LightGBM
 │   │   ├── combinaison.py        modèle × cote (Benter), et calibration
-│   │   └── plackett_luce.py      de la victoire à l'arrivée : Trio, Quarté, Quinté…
+│   │   ├── plackett_luce.py      de la victoire à l'arrivée : Trio, Quarté, Quinté…
+│   │   └── artefact.py           le modèle de production : entraîné, versionné, rechargé
 │   ├── paris/                    espérance, mise de Kelly, paris fictifs
+│   ├── inference/                pronostics à H-30 et H-5, journal en ajout seul, service
 │   ├── evaluation/
 │   │   ├── periodes.py           entraînement, réglage, test gelé
 │   │   ├── echantillon.py        quelles courses sont évaluables, lesquelles sont écartées
@@ -292,7 +311,7 @@ ilomad-turf/
 │   ├── services/                 ce que l'application affiche : programme, marché, santé
 │   └── app/                      pages Streamlit ; n'appellent que services/
 ├── tests/                        dont fixtures/raw : trois jours réels, anonymisés
-└── data/                         fichiers bruts, état, parquet, rapports — jamais dans Git
+└── data/                         bruts, état, parquet, rapports, modèles, pronostics — jamais dans Git
 ```
 
 ---
@@ -320,6 +339,7 @@ ilomad-turf/
 | `Dossier des données brutes non inscriptible` au démarrage | Sur le VPS : `chown -R 10001:10001 data` |
 | `Configuration invalide : …` au démarrage | Corriger la variable nommée dans `.env`, d'après [.env.example](./.env.example) |
 | L'ingestion signale des documents illisibles | [docs/EXPLOITATION.md § 4.10](./docs/EXPLOITATION.md#4-que-faire-quand-une-alerte-arrive) |
+| Aucun pronostic n'apparaît | [docs/EXPLOITATION.md § 4.11](./docs/EXPLOITATION.md#411-inférence--aucun-modèle-actif-modèle-illisible-erreur-inattendue) |
 | L'application ne s'ouvre pas | [docs/EXPLOITATION.md § 8.1](./docs/EXPLOITATION.md#81-ouvrir-lapplication) |
 | La base est abîmée ou douteuse | La reconstruire : [docs/PLAN-DEPLOIEMENT.md § 7.1](./docs/PLAN-DEPLOIEMENT.md#71-reconstruire-la-base) |
 

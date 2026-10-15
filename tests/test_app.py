@@ -112,6 +112,10 @@ def test_la_page_de_sante(base_chargee, application, tmp_path):
         "Couverture, 30 jours": "—",
         "Dernier document en base": "12/10/2026 23:17",
         "Reprise d'historique": "Aucune demande",
+        "Modèle actif": "aucun",
+        "Courses pronostiquées à H-30": "0 / 0",
+        "Courses pronostiquées à H-5": "0 / 0",
+        "Dernier pronostic": "—",
     }
     assert not at.error
     assert [i.value for i in at.info] == ["Aucun jour de collecte en direct n'est encore clos."]

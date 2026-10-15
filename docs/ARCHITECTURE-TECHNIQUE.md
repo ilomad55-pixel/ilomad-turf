@@ -1,8 +1,8 @@
 # Architecture technique — ILOMAD-TURF
 
-> **Version** : 1.5 | **Date** : 15/10/2026 | **Auteur** : Olivier MORA avec Claude Code
+> **Version** : 1.6 | **Date** : 15/10/2026 | **Auteur** : Olivier MORA avec Claude Code
 > **Depuis la version 1.0** : le collecteur ne dépend plus de la base ([ADR 0005](./adr/0005-collecteur-ne-depend-que-du-disque.md)) ; un service de surveillance est ajouté ; la reprise d'historique est exécutée par le collecteur ([ADR 0006](./adr/0006-reprise-executee-par-le-collecteur.md)).
-> **Livré à ce jour** : collecteur, surveillance, sauvegarde (sprint 1) ; reprise d'historique, base PostgreSQL, ingestion, contrôles de qualité (sprint 2) ; modèle 0, métriques, rapport de référence du marché, export Parquet, couche `services/`, application v0 (sprint 3) ; variables point-in-time, logit conditionnel, LightGBM, combinaison, validation glissante, protocole de décision (sprint 4). Le reste est la cible des sprints suivants.
+> **Livré à ce jour** : collecteur, surveillance, sauvegarde (sprint 1) ; reprise d'historique, base PostgreSQL, ingestion, contrôles de qualité (sprint 2) ; modèle 0, métriques, rapport de référence du marché, export Parquet, couche `services/`, application v0 (sprint 3) ; variables point-in-time, logit conditionnel, LightGBM, combinaison, validation glissante, protocole de décision (sprint 4) ; Plackett-Luce, paris fictifs (sprint 5) ; modèle de production versionné, inférence H-30 et H-5, journal des pronostics, pages course et performance (sprint 6). Non livré : l'API de lecture (« Should »).
 
 Ce document décrit **comment** l'application est construite. Les exigences sont dans le [cahier des charges](./CAHIER-DES-CHARGES.md), le comportement de la source dans [SPEC-SOURCE-PMU.md](./SPEC-SOURCE-PMU.md), le « pourquoi » de chaque choix dans [adr/](./adr/).
 
@@ -92,9 +92,9 @@ Chaque composant fait une seule chose. Tous partagent le même paquet Python `tu
 | **Tables à plat** | Une ligne par partant, avec ses quatre cotes et son résultat ; lecture en base, export Parquet | `core.*` | Tableau Polars, `data/parquet/` | `export.py` |
 | **Modèles** | Marché, logit conditionnel, LightGBM, combinaison, calibration (livrés) ; Plackett-Luce avec atténuation par rang (livrés) | Variables | Probabilités | `modeles/` |
 | **Évaluation** | Métriques, référence du marché, validation glissante, décision (livrés) ; probabilités de place et paris fictifs en simple gagnant (livrés) | Table des partants, puis `ml.prediction` | Rapports, `ml.pari_fictif` | `evaluation/` |
-| **Inférence** | Produire les pronostics à H-30 et H-5 | Modèle versionné, instantanés du jour | `ml.prediction` | `cli predict` |
+| **Inférence** (livrée) | Produire les pronostics à H-30 et H-5 | Modèle actif, base | `data/pronostics`, puis `ml.prediction` | `inference/` ([ADR 0009](./adr/0009-journal-des-pronostics.md)) |
 | **Services** | Seule porte d'entrée de la lecture pour l'interface et l'API | `core.*`, `ml.*` | Objets métier | `services/` |
-| **Application** | Programme du jour et marché, santé de la collecte (livrés) ; pronostics et performance (sprint 5) | `services/` | Pages | `app/` |
+| **Application** (livrée) | Programme et marché, page course avec le modèle, performance, santé de la collecte et de l'inférence | `services/` | Pages | `app/` |
 
 **Règle de dépendance.** `app/` et `api/` n'appellent que `services/`. Aucune page n'écrit de SQL. C'est la séparation qui permettra de remplacer Streamlit sans toucher au reste.
 

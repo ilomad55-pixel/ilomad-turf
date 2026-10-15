@@ -1,12 +1,14 @@
 """Schéma de la base, décrit en un seul endroit.
 
-Deux schémas PostgreSQL, du plus proche de la source au plus proche de l'usage :
+Trois schémas PostgreSQL, du plus proche de la source au plus proche de l'usage :
 
     raw    ce que le collecteur a fait (dérivé des journaux du disque)
     core   le modèle relationnel propre : courses, chevaux, partants, cotes, résultats
+    ml     les versions de modèle et les pronostics, en ajout seul
 
-Rien ici n'est une source de vérité : l'ingestion reconstruit ces tables à
-l'identique depuis les fichiers bruts (ADR 0001 et 0005). La description
+raw et core ne sont pas des sources de vérité : l'ingestion les reconstruit à
+l'identique depuis les fichiers bruts (ADR 0001 et 0005). ml non plus : chaque
+pronostic est d'abord écrit dans data/pronostics, journal qui fait foi. La description
 détaillée des tables et des unités est dans docs/MODELE-DONNEES.md.
 
 Unités, reprises telles que la source les donne :
@@ -19,6 +21,7 @@ from __future__ import annotations
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -35,7 +38,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 
-SCHEMAS = ("raw", "core")
+SCHEMAS = ("raw", "core", "ml")
 
 metadata = MetaData(
     naming_convention={
@@ -354,4 +357,55 @@ performance = Table(
     Column("jockey", Text),
     Column("premiers", JSONB),
     schema="core",
+)
+
+
+# ----------------------------------------------------------------------- ml
+
+modele_version = Table(
+    "modele_version",
+    metadata,
+    # « logit-internet-20250930-1a2b3c4d » : modèle, masse, dernier jour appris, empreinte.
+    Column("version", Text, primary_key=True),
+    _horodatage("cree_le", nullable=False),
+    Column("modele", Text, nullable=False),
+    Column("masse", Text, nullable=False),
+    Column("entraine_jusqu_au", Date, nullable=False),
+    # sha256 du fichier du modèle : la version désigne un fichier précis.
+    Column("empreinte", Text, nullable=False),
+    Column("fiche", JSONB, nullable=False),
+    schema="ml",
+)
+
+# Un pronostic par partant, par créneau et par version de modèle. En ajout seul : un
+# déclencheur refuse toute modification ou suppression (EF-18), et la base refuse un
+# pronostic qui ne précède pas le départ prévu.
+prediction = Table(
+    "prediction",
+    metadata,
+    _identifiant(),
+    Column("modele_version", Text, ForeignKey("ml.modele_version.version"), nullable=False),
+    # Clés naturelles, pas d'identifiants de core : core se reconstruit, ses
+    # identifiants changent, les pronostics restent.
+    Column("date_programme", Date, nullable=False),
+    Column("reunion", SmallInteger, nullable=False),
+    Column("course", SmallInteger, nullable=False),
+    Column("numero", SmallInteger, nullable=False),
+    Column("cheval", Text),
+    Column("creneau", Text, nullable=False),
+    _horodatage("cree_le", nullable=False),
+    _horodatage("depart_prevu", nullable=False),
+    Column("p_fondamental", Float, nullable=False),
+    Column("p_marche", Float),
+    Column("p_combine", Float, nullable=False),
+    Column("p_dans_les_3", Float),
+    # La cote vue au moment du pronostic, et son horodatage par la source.
+    Column("cote", Float),
+    _horodatage("cote_le"),
+    # Les variables qui ont le plus poussé ou retenu le partant.
+    Column("explication", JSONB),
+    UniqueConstraint("modele_version", "date_programme", "reunion", "course", "numero", "creneau"),
+    CheckConstraint("cree_le < depart_prevu", name="ck_prediction_avant_le_depart"),
+    Index("ix_prediction_course", "date_programme", "reunion", "course"),
+    schema="ml",
 )

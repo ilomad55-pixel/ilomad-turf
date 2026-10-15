@@ -117,6 +117,19 @@ def test_la_sauvegarde_part_une_fois_par_nuit(parametres):
     assert banc.messages == []
 
 
+def test_la_sauvegarde_copie_aussi_les_pronostics_et_les_modeles(parametres):
+    parametres.dossier_pronostics.mkdir(parents=True)
+    parametres.dossier_modeles.mkdir(parents=True)
+    banc = Banc(parametres, a_paris(JOUR, 3, 31))
+    banc.battre()
+    banc.surveillance.pas()
+    assert banc.commandes == [
+        ["rclone", "copy", str(parametres.dossier_brut), "turf:seau-de-test/raw"],
+        ["rclone", "copy", str(parametres.dossier_pronostics), "turf:seau-de-test/pronostics"],
+        ["rclone", "copy", str(parametres.dossier_modeles), "turf:seau-de-test/models"],
+    ]
+
+
 def test_une_sauvegarde_en_echec_alerte_et_sera_retentee(parametres):
     banc = Banc(parametres, a_paris(JOUR, 3, 31))
     banc.battre()
