@@ -64,7 +64,10 @@ echo "== Ports =="
 ports_ecoutes=$(ss -tlnH | awk '{print $4}' | sed 's/.*://' | sort -un | tr '\n' ' ')
 echo "  En ecoute : $ports_ecoutes"
 for port in $PORTS_PREVUS; do
-  if echo " $ports_ecoutes" | grep -q " $port "; then
+  if docker ps --filter "name=ilomad-turf" --format '{{.Ports}}' 2>/dev/null       | grep -q "127.0.0.1:${port}->"; then
+    # Lors d'une mise a jour, nos propres services occupent deja leurs ports.
+    succes "port $port deja pris par ilomad-turf (normal pour une mise a jour)"
+  elif echo " $ports_ecoutes" | grep -q " $port "; then
     echec "port $port deja utilise"
   else
     succes "port $port libre"
