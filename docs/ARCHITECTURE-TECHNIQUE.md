@@ -90,8 +90,8 @@ Chaque composant fait une seule chose. Tous partagent le même paquet Python `tu
 | **Ingestion** | Transformer le brut en tables propres ; rapprocher chevaux et personnes | Fichiers bruts et journaux | `raw.*`, `core.*` | `ingestion/` |
 | **Variables** (livrées) | Calculer les variables d'un partant telles que connues avant le jour de la course | Table des partants | Colonnes `v_*` | `features/` |
 | **Tables à plat** | Une ligne par partant, avec ses quatre cotes et son résultat ; lecture en base, export Parquet | `core.*` | Tableau Polars, `data/parquet/` | `export.py` |
-| **Modèles** | Marché, logit conditionnel, LightGBM, combinaison, calibration (livrés) ; Plackett-Luce (sprint 5) | Variables | Probabilités | `modeles/` |
-| **Évaluation** | Métriques, référence du marché, validation glissante, décision (livrés) ; paris fictifs (sprint 5) | Table des partants, puis `ml.prediction` | Rapports, `ml.pari_fictif` | `evaluation/` |
+| **Modèles** | Marché, logit conditionnel, LightGBM, combinaison, calibration (livrés) ; Plackett-Luce avec atténuation par rang (livrés) | Variables | Probabilités | `modeles/` |
+| **Évaluation** | Métriques, référence du marché, validation glissante, décision (livrés) ; probabilités de place et paris fictifs en simple gagnant (livrés) | Table des partants, puis `ml.prediction` | Rapports, `ml.pari_fictif` | `evaluation/` |
 | **Inférence** | Produire les pronostics à H-30 et H-5 | Modèle versionné, instantanés du jour | `ml.prediction` | `cli predict` |
 | **Services** | Seule porte d'entrée de la lecture pour l'interface et l'API | `core.*`, `ml.*` | Objets métier | `services/` |
 | **Application** | Programme du jour et marché, santé de la collecte (livrés) ; pronostics et performance (sprint 5) | `services/` | Pages | `app/` |

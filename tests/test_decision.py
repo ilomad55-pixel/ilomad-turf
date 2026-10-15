@@ -59,6 +59,10 @@ def test_un_modele_qui_sait_ce_que_la_cote_ignore_passe_le_go(avec_signal):
     assert resultat["alpha"] > 0.3
     assert resultat["verdict"]["criteres"] == {MARCHE_REFERENCE: True, MARCHE_FINALE: True}
     assert resultat["verdict"]["conclusion"].startswith("GO :")
+    # Les paris fictifs sont publiés à côté, joués avec les probabilités combinées.
+    paris = resultat["paris_fictifs"]
+    assert paris["paris"] > 0
+    assert paris["mises"] > 0 and paris["capital_final"] > 0
     assert json.loads(json.dumps(resultat))["masse"] == "OFFLINE"
 
 
@@ -141,7 +145,14 @@ def test_le_rapport_redige(avec_signal):
         "Réglage", ["entête"], [decision.rediger_evaluation("logit", resultat, explication)]
     )
     assert texte.startswith("# Réglage")
-    for morceau in ("cote de référence", "cote finale", "modèle combiné", "**GO :", "| signal |"):
+    for morceau in (
+        "cote de référence",
+        "cote finale",
+        "modèle combiné",
+        "**GO :",
+        "| signal |",
+        "Paris fictifs en simple gagnant",
+    ):
         assert morceau in texte, morceau
 
 

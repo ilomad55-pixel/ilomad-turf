@@ -2,7 +2,7 @@
 
 > Application personnelle qui calcule des probabilités calibrées pour les courses de trot et les mesure contre la cote PMU. Python, PostgreSQL, Streamlit.
 
-**Statut** : sprint 4 (modèle v1, protocole de go/no-go) — version 0.5.0
+**Statut** : sprint 5 (probabilités des paris, paris fictifs) — version 0.6.0
 **Usage** : strictement personnel. Aucune donnée PMU ne doit sortir de l'application.
 
 ---
@@ -20,7 +20,7 @@ Pour y répondre honnêtement, l'application :
 
 Le verdict (go/no-go) est rendu à la fin du sprint 4, sur 12 mois de courses que le modèle n'a jamais vues.
 
-**Où en est-on.** L'étape 1 est écrite : le collecteur suit le programme du jour, stocke chaque réponse de la source telle quelle, et peut rapatrier cinq ans d'historique. Une base PostgreSQL met ces fichiers en forme. La barre à franchir est mesurée : `turf evaluate` dit ce que valent les cotes seules, et une application montre le programme, le marché et la santé de la collecte. Le modèle v1 et le protocole de décision sont écrits : `turf reglage` les compare au marché, `turf decide` rendra le verdict, une seule fois, quand les cinq ans d'historique seront chargés. Le journal de pronostics (étape 3) vient au sprint 6.
+**Où en est-on.** L'étape 1 est écrite : le collecteur suit le programme du jour, stocke chaque réponse de la source telle quelle, et peut rapatrier cinq ans d'historique. Une base PostgreSQL met ces fichiers en forme. La barre à franchir est mesurée : `turf evaluate` dit ce que valent les cotes seules, et une application montre le programme, le marché et la santé de la collecte. Le modèle v1 et le protocole de décision sont écrits : `turf reglage` les compare au marché, `turf decide` rendra le verdict, une seule fois, quand les cinq ans d'historique seront chargés. Les probabilités de chaque type de pari (Trio, Quarté, Quinté…) se déduisent des probabilités de victoire, et `turf places` vérifie qu'elles collent aux arrivées. Le journal de pronostics (étape 3) vient au sprint 6.
 
 ---
 
@@ -174,6 +174,12 @@ Le rapport écarte toujours les courses du 01/10/2025 au 30/09/2026 : c'est le t
 
 Protocole et critères : [docs/adr/0008](./docs/adr/0008-protocole-de-decision.md).
 
+```powershell
+# Probabilités de finir dans les 2 ou 3 premiers, contre les arrivées observées.
+# Écrit data\rapports\places-AAAA-MM-JJ.md et .json
+.\.venv\Scripts\turf.exe places --parquet data\parquet
+```
+
 ### Tests et qualité
 
 ```powershell
@@ -272,14 +278,17 @@ ilomad-turf/
 │   │   ├── marche.py             modèle 0 : la cote, avec ou sans correction du biais
 │   │   ├── logit_conditionnel.py le logit des courses, par la méthode de Newton
 │   │   ├── fondamental.py        les deux modèles sans cote : logit, LightGBM
-│   │   └── combinaison.py        modèle × cote (Benter), et calibration
+│   │   ├── combinaison.py        modèle × cote (Benter), et calibration
+│   │   └── plackett_luce.py      de la victoire à l'arrivée : Trio, Quarté, Quinté…
+│   ├── paris/                    espérance, mise de Kelly, paris fictifs
 │   ├── evaluation/
 │   │   ├── periodes.py           entraînement, réglage, test gelé
 │   │   ├── echantillon.py        quelles courses sont évaluables, lesquelles sont écartées
 │   │   ├── metriques.py          log-perte, Brier, calibration, intervalle de confiance
 │   │   ├── reference.py          le rapport de référence du marché
 │   │   ├── jeu.py                le jeu de modélisation
-│   │   └── decision.py           validation glissante, verdict, ouverture unique du test
+│   │   ├── decision.py           validation glissante, verdict, ouverture unique du test
+│   │   └── places.py             probabilités de place contre les arrivées
 │   ├── services/                 ce que l'application affiche : programme, marché, santé
 │   └── app/                      pages Streamlit ; n'appellent que services/
 ├── tests/                        dont fixtures/raw : trois jours réels, anonymisés

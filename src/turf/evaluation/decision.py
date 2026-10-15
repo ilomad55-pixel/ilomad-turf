@@ -33,6 +33,7 @@ from turf.evaluation.periodes import TEST_GELE
 from turf.modeles import fondamental
 from turf.modeles.combinaison import Combinaison
 from turf.modeles.marche import probabilites as probabilites_du_marche
+from turf.paris.fictifs import simuler_simple_gagnant
 
 PAS_MOIS = 3
 COURSES_MINIMUM = 30
@@ -181,6 +182,10 @@ def evaluer(
         "mesures": mesures,
         "ecarts": ecarts,
         "verdict": verdict(mesures, ecarts),
+        # Publié, pas un critère : décision à la cote de référence, paiement à la cote finale.
+        "paris_fictifs": simuler_simple_gagnant(
+            probabilites[COMBINE], evalue.cote(reference), evalue.cote(finale), gagnant, course
+        ),
     }
 
 
@@ -305,6 +310,7 @@ def rediger_evaluation(nom_modele: str, resultat: dict, explication: dict) -> li
         "",
         f"**{r['verdict']['conclusion']}**",
         "",
+        *_paris_fictifs(r["paris_fictifs"]),
     ]
     if "poids" in explication:
         lignes += _principales("Poids du logit (par écart-type)", explication["poids"])
@@ -313,6 +319,30 @@ def rediger_evaluation(nom_modele: str, resultat: dict, explication: dict) -> li
             "Importance des variables (part du gain)", explication["importances"]
         )
     return lignes
+
+
+def _paris_fictifs(paris: dict) -> list[str]:
+    politique = paris["politique"]
+    entete = (
+        f"Paris fictifs en simple gagnant (information, pas un critère) : Kelly × "
+        f"{_nombre(politique['fraction'], 2)}, au plus {_nombre(100 * politique['plafond'], 0)} % "
+        f"du capital par pari, espérance d'au moins "
+        f"{_nombre(100 * politique['esperance_minimum'], 0)} % à la cote de référence ; "
+        "payés à la cote finale."
+    )
+    if not paris["paris"]:
+        return [entete, "", "Aucun pari : le modèle n'a jamais vu d'avantage suffisant.", ""]
+    return [
+        entete,
+        "",
+        "| Paris | Gagnants | Mises | Rendement | Capital final | Pire baisse |",
+        "|---|---|---|---|---|---|",
+        f"| {paris['paris']} | {paris['paris_gagnants']} | {_nombre(paris['mises'], 0)} € | "
+        f"{_nombre(100 * paris['rendement'], 1)} % | "
+        f"{_nombre(paris['capital_final'], 0)} € sur {_nombre(paris['capital_initial'], 0)} € | "
+        f"{_nombre(100 * paris['pire_baisse'], 1)} % |",
+        "",
+    ]
 
 
 def _principales(titre: str, valeurs: dict[str, float]) -> list[str]:

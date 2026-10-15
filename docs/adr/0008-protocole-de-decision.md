@@ -70,3 +70,7 @@ Sur le poste local, à partir de l'export Parquet du VPS ([ADR 0003](./0003-vps-
 - **Historique limité au périmètre repris.** Les variables historiques (forme, Elo, drivers) ne voient que les courses présentes en base : trot en France depuis 10/2021. Les premiers mois de l'entraînement ont donc des historiques courts.
 - **Variables « dernier état connu »** (driver, ferrure, forfait) : un changement annoncé après 30 minutes avant le départ est vu par le modèle ([MODELE-DONNEES.md § 8](../MODELE-DONNEES.md#8-limites-connues)). Biais léger, identique pour le modèle et pour la mesure du marché.
 - **Les performances détaillées** (`performances-AAAA.parquet`), qui remontent avant 2021, ne sont pas encore utilisées. Première piste d'amélioration si le verdict est NO-GO.
+
+## Ajout du 15/10/2026 : paris fictifs
+
+Chaque évaluation (réglage ou décision) simule aussi des paris en simple gagnant sur les courses évaluées ([paris/fictifs.py](../../src/turf/paris/fictifs.py)) : pari si l'espérance à la cote de référence dépasse 5 %, mise d'un quart de Kelly plafonnée à 2 % du capital, paiement à la cote finale de la même masse (le rapport définitif, à l'arrondi près). Le rendement est publié, **il n'est pas un critère** : sur un an, il est trop bruité pour trancher.

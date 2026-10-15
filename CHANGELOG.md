@@ -8,8 +8,19 @@
 ### À faire lors de la mise à jour d'une installation existante
 
 - Depuis le sprint 1 : ajouter à `.env` `POSTGRES_PASSWORD` et `TURF_BASE_URL` (voir `.env.example` et le § 6.1 du plan de déploiement).
-- Depuis le sprint 3 : rien à ajouter à `.env`, rien de nouveau à déployer ; l'image grossit de LightGBM.
+- Depuis le sprint 3 : rien à ajouter à `.env`, rien de nouveau à déployer ; l'image grossit de LightGBM. Les sprints 4 et 5 ne touchent que des commandes lancées sur le poste.
 - Depuis le sprint 2 : rien à ajouter à `.env`. Un service de plus, `app` (384 Mo, port `127.0.0.1:8510`) : relancer `scripts/etat_vps.sh` avant, puis suivre le § 6.2 du plan de déploiement.
+
+### Ajouté — sprint 5, probabilités des paris
+
+- Ajouter Plackett-Luce avec atténuation par rang : probabilités exactes jusqu'à la 3e place (simple placé, couplé gagnant et placé, trio, trio dans l'ordre), Monte-Carlo pour le 2 sur 4, le Quarté et le Quinté.
+- Ajouter l'ajustement des exposants de la 2e et de la 3e place sur les arrivées observées.
+- Ajouter la commande `turf places` : probabilités Top 2 et Top 3 contre les arrivées, exposants ajustés contre Harville.
+- Ajouter l'espérance d'un pari, la mise de Kelly fractionnelle plafonnée et les paris fictifs en simple gagnant ; ils figurent dans les rapports de réglage et de décision, sans être un critère.
+
+### Modifié — sprint 5
+
+- Passer la version à 0.6.0.
 
 ### Ajouté — sprint 4, modèle v1 et protocole de décision
 

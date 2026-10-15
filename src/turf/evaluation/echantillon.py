@@ -86,13 +86,15 @@ VARIANTES = tuple(
 class Echantillon:
     """Les courses retenues pour une variante.
 
-    Une ligne par partant pour `course`, `cote`, `gagnant` ; une ligne par course
+    Une ligne par partant pour `course`, `cote`, `gagnant`, `place` ; une ligne par course
     pour les autres tableaux, dans l'ordre des rangs de `course`.
     """
 
     course: np.ndarray
     cote: np.ndarray
     gagnant: np.ndarray
+    # Place à l'arrivée ; 0 pour un partant non classé (disqualifié, arrêté…).
+    place: np.ndarray
     course_id: np.ndarray
     jour: np.ndarray
     specialite: np.ndarray
@@ -111,6 +113,7 @@ class Echantillon:
             course=rangs[self.course[partants]],
             cote=self.cote[partants],
             gagnant=self.gagnant[partants],
+            place=self.place[partants],
             course_id=self.course_id[garder],
             jour=self.jour[garder],
             specialite=self.specialite[garder],
@@ -184,6 +187,7 @@ def construire(donnees: pl.DataFrame, variante: Variante) -> tuple[Echantillon, 
         course=lignes["rang"].to_numpy().astype(np.int64),
         cote=lignes[f"cote_{variante.cle}"].to_numpy().astype(float),
         gagnant=(lignes["resultat_place"] == 1).fill_null(False).to_numpy(),
+        place=lignes["resultat_place"].fill_null(0).to_numpy().astype(np.int64),
         course_id=courses["course_id"].to_numpy(),
         jour=courses["date_programme"].to_numpy().astype("datetime64[D]"),
         specialite=courses["specialite"].fill_null("?").to_numpy().astype(str),

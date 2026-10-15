@@ -13,6 +13,7 @@ turf export                     écrit les tables d'entraînement en Parquet
 turf evaluate                   mesure les cotes : rapport de référence du marché
 turf reglage                    compare les modèles au marché, sur la période de réglage
 turf decide                     ouvre le test gelé, une seule fois : rapport de go/no-go
+turf places                     probabilités de place (Plackett-Luce) contre les arrivées
 turf app                        lance l'application
 """
 
@@ -38,7 +39,7 @@ from turf.collecte.ressources import PROGRAMME, Demande
 from turf.collecte.stockage_brut import StockageBrut
 from turf.config import ConfigurationInvalide, Parametres
 from turf.db import session
-from turf.evaluation import decision, echantillon, reference
+from turf.evaluation import decision, echantillon, places, reference
 from turf.evaluation.jeu import preparer
 from turf.evaluation.periodes import REGLAGE, TEST_GELE
 from turf.horloge import PARIS, Horloge, jour_de_programme
@@ -468,6 +469,74 @@ def evaluate(
         raise typer.Exit(1)
 
 
+@app.command("places")
+def probabilites_de_place(
+    cote: Annotated[
+        str,
+        typer.Option(
+            "--cote",
+            help="Cote dont on part : reference_offline, reference_internet, finale_offline "
+            "ou finale_internet.",
+        ),
+    ] = "finale_offline",
+    perimetre: Annotated[
+        str, typer.Option("--perimetre", help="Courses mesurées : trot-france, trot ou tout.")
+    ] = echantillon.TROT_FRANCE,
+    coupure: Annotated[
+        str,
+        typer.Option("--coupure", help="Exposants ajustés avant cette date, jugés après."),
+    ] = REGLAGE[0].isoformat(),
+    parquet: OptionParquet = None,
+    sortie: OptionSortie = None,
+) -> None:
+    """Probabilités de finir dans les 2 ou 3 premiers, contre les arrivées observées.
+
+    Ajuste l'atténuation par rang de Plackett-Luce et la compare à Harville. Le
+    test gelé est toujours écarté.
+    """
+    parametres = _parametres()
+    horloge = Horloge()
+    if cote not in {v.cle for v in echantillon.VARIANTES}:
+        raise typer.BadParameter(f"cote inconnue : {cote}")
+    if perimetre not in echantillon.PERIMETRES:
+        raise typer.BadParameter(f"périmètre attendu : {', '.join(echantillon.PERIMETRES)}")
+    donnees = _partants(parametres, parquet, echantillon.COLONNES)
+    rapport = places.calculer(
+        donnees,
+        cote=cote,
+        nom_perimetre=perimetre,
+        coupure=_jour(coupure, horloge),
+        maintenant=horloge.maintenant().astimezone(PARIS),
+    )
+    chemin = _ecrire_rapport(
+        sortie or parametres.dossier_donnees / "rapports",
+        f"places-{jour_de_programme(horloge.maintenant())}",
+        places.rediger(rapport),
+        rapport,
+    )
+    typer.echo(
+        f"{rapport['courses_ajustement']} courses d'ajustement, "
+        f"{rapport['courses_evaluation']} courses jugées."
+    )
+    if rapport["attenuation"] is None:
+        typer.echo("Pas assez de courses de part et d'autre de la coupure.", err=True)
+        raise typer.Exit(1)
+    a = rapport["attenuation"]
+    typer.echo(
+        f"Exposants : 2e place {_fr(a['deuxieme'], '.3f')}, 3e place "
+        f"{_fr(a['troisieme'], '.3f')} (Harville : 1). Gain par course sur Harville : "
+        f"{_fr(rapport['gain_sur_harville'], '+.4f')}."
+    )
+    for nom, mesures in rapport["mesures"].items():
+        m = mesures["dans_les_3"]
+        typer.echo(
+            f"{nom:<9} Top 3 : annoncé {_fr(m['probabilite_moyenne'], '.1%')}, observé "
+            f"{_fr(m['frequence'], '.1%')}, erreur de calibration "
+            f"{_fr(m['erreur_de_calibration'], '.4f')}"
+        )
+    typer.echo(f"Rapport : {chemin}")
+
+
 @app.command("app")
 def application(
     adresse: Annotated[
@@ -521,6 +590,11 @@ def _periode(valeur: str, horloge: Horloge) -> tuple[date, date]:
             f"période attendue sous la forme AAAA-MM-JJ:AAAA-MM-JJ, reçu « {valeur} »"
         )
     return _jour(debut, horloge), _jour(fin, horloge)
+
+
+def _fr(valeur: float, format_: str) -> str:
+    """Un nombre écrit à la française : virgule décimale."""
+    return format(valeur, format_).replace(".", ",")
 
 
 def _ecrire_rapport(dossier: Path, nom: str, texte: str, contenu: dict) -> Path:
