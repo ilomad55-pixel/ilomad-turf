@@ -10,7 +10,7 @@ Ce document permet à quelqu'un qui n'a pas écrit le code d'installer, de mettr
 >
 > | Élément | État |
 > |---------|------|
-> | Code | 235 tests, dont une journée de collecte simulée, l'ingestion sur un vrai PostgreSQL et l'application pilotée sans navigateur |
+> | Code | 281 tests, dont une journée de collecte simulée, l'ingestion sur un vrai PostgreSQL, l'application pilotée sans navigateur et le protocole de décision sur des mondes simulés |
 > | Collecteur | A tourné 45 minutes contre la vraie source, puis redémarré sans rien refaire |
 > | Ingestion | Vérifiée sur 17 jours réels de 2021 à 2026 : 0 document illisible, contrôles de qualité au vert |
 > | Reprise d'historique | **Jamais lancée contre la vraie source.** Vérifiée par simulation seulement |

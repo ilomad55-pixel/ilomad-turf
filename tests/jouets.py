@@ -24,19 +24,28 @@ def course(
     avance_reference: timedelta = timedelta(minutes=30),
     retard_finale: timedelta = timedelta(minutes=1),
     statut: str = "ARRIVEE",
+    chevaux: list[int] | None = None,
+    drivers: list[int | None] | None = None,
+    places: list[int | None] | None = None,
+    heure: int = 14,
 ) -> list[dict]:
     """Les partants d'une course, numérotés à partir de 1.
 
     `cotes` vaut pour les quatre variantes, sauf celles que `autres_cotes` redéfinit.
-    `gagnant` est le numéro du gagnant ; None pour une course sans arrivée.
+    `gagnant` est le numéro du gagnant ; None pour une course sans arrivée. `places`
+    donne l'arrivée complète à la place de `gagnant` (None : non classé). Sans
+    `chevaux`, chaque partant est un cheval qu'on ne reverra pas.
     """
-    depart = datetime(jour.year, jour.month, jour.day, 14, 0, tzinfo=UTC)
+    depart = datetime(jour.year, jour.month, jour.day, heure, 0, tzinfo=UTC)
     lignes = []
     for rang, _ in enumerate(cotes):
         numero = rang + 1
         forfait = numero in non_partants
         ligne = {
             "course_id": course_id,
+            "partant_id": course_id * 100 + numero,
+            "cheval_id": chevaux[rang] if chevaux else course_id * 100 + numero,
+            "driver_id": drivers[rang] if drivers else None,
             "date_programme": jour,
             "depart_prevu": depart,
             "pays": pays,
@@ -51,7 +60,11 @@ def course(
             ligne["resultat_statut"] = "NON_PARTANT" if forfait else "CLASSE"
             if not forfait:
                 # Le gagnant est premier ; les autres se partagent les places suivantes.
-                ligne["resultat_place"] = 1 if numero == gagnant else numero + 1
+                ligne["resultat_place"] = (
+                    places[rang] if places else 1 if numero == gagnant else numero + 1
+                )
+                if ligne["resultat_place"] is None:
+                    ligne["resultat_statut"] = "DISQUALIFIE_POUR_ALLURE_IRREGULIERE"
         for variante in VARIANTES:
             instant, masse = variante.split("_")
             valeur = (autres_cotes or {}).get(variante, cotes)[rang]

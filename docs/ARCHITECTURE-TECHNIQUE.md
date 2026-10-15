@@ -1,8 +1,8 @@
 # Architecture technique — ILOMAD-TURF
 
-> **Version** : 1.4 | **Date** : 13/10/2026 | **Auteur** : Olivier MORA avec Claude Code
+> **Version** : 1.5 | **Date** : 15/10/2026 | **Auteur** : Olivier MORA avec Claude Code
 > **Depuis la version 1.0** : le collecteur ne dépend plus de la base ([ADR 0005](./adr/0005-collecteur-ne-depend-que-du-disque.md)) ; un service de surveillance est ajouté ; la reprise d'historique est exécutée par le collecteur ([ADR 0006](./adr/0006-reprise-executee-par-le-collecteur.md)).
-> **Livré à ce jour** : collecteur, surveillance, sauvegarde (sprint 1) ; reprise d'historique, base PostgreSQL, ingestion, contrôles de qualité (sprint 2) ; modèle 0, métriques, rapport de référence du marché, export Parquet, couche `services/`, application v0 (sprint 3). Le reste est la cible des sprints suivants.
+> **Livré à ce jour** : collecteur, surveillance, sauvegarde (sprint 1) ; reprise d'historique, base PostgreSQL, ingestion, contrôles de qualité (sprint 2) ; modèle 0, métriques, rapport de référence du marché, export Parquet, couche `services/`, application v0 (sprint 3) ; variables point-in-time, logit conditionnel, LightGBM, combinaison, validation glissante, protocole de décision (sprint 4). Le reste est la cible des sprints suivants.
 
 Ce document décrit **comment** l'application est construite. Les exigences sont dans le [cahier des charges](./CAHIER-DES-CHARGES.md), le comportement de la source dans [SPEC-SOURCE-PMU.md](./SPEC-SOURCE-PMU.md), le « pourquoi » de chaque choix dans [adr/](./adr/).
 
@@ -66,7 +66,7 @@ Quatre principes structurent tout le reste ([ADR 0001](./adr/0001-brut-d-abord-e
 | Base de données | PostgreSQL 17 | Contraintes fortes (ajout seul, clés étrangères), `timestamptz`, déjà maîtrisé |
 | Accès aux données | SQLAlchemy 2, migrations Alembic | Schéma versionné dans le code |
 | Calcul | Polars pour les tables, NumPy pour les métriques | Jointures temporelles rapides, faible empreinte mémoire |
-| Modèles | statsmodels (logit conditionnel), LightGBM (classement), scikit-learn (calibration) | Progression du plus simple au plus fin |
+| Modèles | Logit conditionnel écrit en NumPy, LightGBM (classement), combinaison et calibration par logit conditionnel | Progression du plus simple au plus fin, sans dépendance lourde : statsmodels et scikit-learn ne sont pas nécessaires |
 | Ligne de commande | Typer | Une commande par étape : `collect`, `backfill`, `parse`, `export`, `train`, `predict`, `evaluate` |
 | Interface | Streamlit | Développement rapide, un seul utilisateur |
 | API | FastAPI (« Should ») | Habillage de la couche `services/` |
@@ -88,10 +88,10 @@ Chaque composant fait une seule chose. Tous partagent le même paquet Python `tu
 | **Collecteur** | Interroger la source selon le calendrier, au débit plafonné | Programme du jour, journal des tâches | Fichiers bruts, journaux du jour, battement | `collecte/` |
 | **Surveillance** | Alerter si le collecteur est muet ou le disque plein ; sauvegarder chaque nuit | Battement, `data/` | Alertes, copie hors VPS | `surveillance.py` |
 | **Ingestion** | Transformer le brut en tables propres ; rapprocher chevaux et personnes | Fichiers bruts et journaux | `raw.*`, `core.*` | `ingestion/` |
-| **Variables** | Calculer les variables d'un partant telles que connues à une heure donnée | `core.*`, heure de pronostic | Tableau de variables | `features/` |
+| **Variables** (livrées) | Calculer les variables d'un partant telles que connues avant le jour de la course | Table des partants | Colonnes `v_*` | `features/` |
 | **Tables à plat** | Une ligne par partant, avec ses quatre cotes et son résultat ; lecture en base, export Parquet | `core.*` | Tableau Polars, `data/parquet/` | `export.py` |
-| **Modèles** | Marché (livré), logit conditionnel, boosting, combinaison, calibration, Plackett-Luce | Variables | Probabilités, artefact versionné | `modeles/` |
-| **Évaluation** | Métriques et rapport de référence du marché (livrés), validation glissante, paris fictifs | Table des partants, puis `ml.prediction` | Rapports, `ml.pari_fictif` | `evaluation/` |
+| **Modèles** | Marché, logit conditionnel, LightGBM, combinaison, calibration (livrés) ; Plackett-Luce (sprint 5) | Variables | Probabilités | `modeles/` |
+| **Évaluation** | Métriques, référence du marché, validation glissante, décision (livrés) ; paris fictifs (sprint 5) | Table des partants, puis `ml.prediction` | Rapports, `ml.pari_fictif` | `evaluation/` |
 | **Inférence** | Produire les pronostics à H-30 et H-5 | Modèle versionné, instantanés du jour | `ml.prediction` | `cli predict` |
 | **Services** | Seule porte d'entrée de la lecture pour l'interface et l'API | `core.*`, `ml.*` | Objets métier | `services/` |
 | **Application** | Programme du jour et marché, santé de la collecte (livrés) ; pronostics et performance (sprint 5) | `services/` | Pages | `app/` |
@@ -194,11 +194,11 @@ L'identifiant `idCheval` de la source vaut `NOM-MÈRE-PÈRE`. Il est absent de l
 
 | Règle | Mise en œuvre | Test |
 |-------|---------------|------|
-| Liste blanche des champs pré-course | `features/registre.py` | Échoue si une variable référence un champ hors liste |
-| Point-in-time | `features/point_in_time.py` filtre sur l'heure de collecte ou sur l'horodatage fourni par la source | Reconstruit une course à deux heures de pronostic, vérifie qu'aucune donnée postérieure n'est lue |
+| Liste blanche des champs pré-course | `features/registre.py` : chaque variable déclare les champs qu'elle lit | Échoue si une variable directe lit un champ hors liste |
+| Point-in-time | `features/construction.py` : tout historique est joint par une jointure temporelle stricte, le jour de la course exclu | Reconstruit une course avant son arrivée et après les jours suivants : variables identiques |
 | Cote utilisée par le modèle | Uniquement une cote dont l'horodatage précède l'heure du pronostic | Test sur une course où la cote de référence est postérieure au départ prévu |
 | Âge d'une réponse | La source est derrière un cache : une réponse peut dater de plusieurs minutes. L'heure d'une donnée est l'heure de collecte moins l'en-tête `age`, conservé dans `_documents.jsonl` | Test sur un document servi par le cache |
-| Jeu de test gelé | Écarté d'office de toute mesure (`evaluation/periodes.py`) ; marqueur d'ouverture unique au sprint 4 | Des courses du test gelé ajoutées aux données ne changent aucun chiffre du rapport |
+| Jeu de test gelé | Écarté d'office de toute mesure (`evaluation/periodes.py`) ; `turf decide` seul l'ouvre, marqueur posé avant tout calcul ([ADR 0008](./adr/0008-protocole-de-decision.md)) | Des courses du test gelé ajoutées aux données ne changent aucun chiffre du rapport |
 
 Champs toujours exclus des variables d'une course : `ordreArrivee`, `tempsObtenu`, `reductionKilometrique`, `incident`, `commentaireApresCourse`, `dernierRapportDirect` (cote finale, postérieure au départ). Ils servent seulement d'historique pour les courses suivantes.
 

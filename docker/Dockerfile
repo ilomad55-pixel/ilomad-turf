@@ -3,8 +3,9 @@
 FROM python:3.13-slim-bookworm
 
 # rclone : sauvegarde nocturne des fichiers bruts, lancée par le service « surveillance ».
+# libgomp1 : bibliothèque de calcul parallèle dont LightGBM a besoin.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates rclone \
+    && apt-get install -y --no-install-recommends ca-certificates rclone libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Même version de uv que celle qui a produit uv.lock.

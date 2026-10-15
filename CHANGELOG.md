@@ -8,7 +8,22 @@
 ### À faire lors de la mise à jour d'une installation existante
 
 - Depuis le sprint 1 : ajouter à `.env` `POSTGRES_PASSWORD` et `TURF_BASE_URL` (voir `.env.example` et le § 6.1 du plan de déploiement).
+- Depuis le sprint 3 : rien à ajouter à `.env`, rien de nouveau à déployer ; l'image grossit de LightGBM.
 - Depuis le sprint 2 : rien à ajouter à `.env`. Un service de plus, `app` (384 Mo, port `127.0.0.1:8510`) : relancer `scripts/etat_vps.sh` avant, puis suivre le § 6.2 du plan de déploiement.
+
+### Ajouté — sprint 4, modèle v1 et protocole de décision
+
+- Ajouter la liste blanche des champs connus avant la course et le registre des variables ; une variable directe qui lirait un résultat est refusée.
+- Ajouter 45 variables point-in-time : carrière, musique, ferrure, forme dans nos données, écart de réduction kilométrique au gagnant, cote de la course précédente, changements de driver et de ferrure, taux lissés des drivers et entraîneurs sur 365 jours, Elo des chevaux, écarts à la moyenne de la course.
+- Ajouter le logit conditionnel (Newton, pénalité L2), le modèle de classement LightGBM, la combinaison avec la cote (Benter) et la calibration par température.
+- Ajouter la validation glissante trimestrielle et la commande `turf reglage`, qui compare modèles et marché sur la période de réglage.
+- Ajouter la commande `turf decide` : ouverture unique du test gelé, protégée par un marqueur posé avant tout calcul, et rapport de go/no-go.
+- Ajouter la décision d'architecture 0008 : protocole de décision.
+
+### Modifié — sprint 4
+
+- Ajouter LightGBM aux dépendances, et `libgomp1` à l'image Docker.
+- Passer la version à 0.5.0.
 
 ### Ajouté — sprint 3, référence du marché et application v0
 

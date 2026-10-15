@@ -2,7 +2,7 @@
 
 > Application personnelle qui calcule des probabilités calibrées pour les courses de trot et les mesure contre la cote PMU. Python, PostgreSQL, Streamlit.
 
-**Statut** : sprint 3 (référence du marché, export, application v0) — version 0.4.0
+**Statut** : sprint 4 (modèle v1, protocole de go/no-go) — version 0.5.0
 **Usage** : strictement personnel. Aucune donnée PMU ne doit sortir de l'application.
 
 ---
@@ -20,7 +20,7 @@ Pour y répondre honnêtement, l'application :
 
 Le verdict (go/no-go) est rendu à la fin du sprint 4, sur 12 mois de courses que le modèle n'a jamais vues.
 
-**Où en est-on.** L'étape 1 est écrite : le collecteur suit le programme du jour, stocke chaque réponse de la source telle quelle, et peut rapatrier cinq ans d'historique. Une base PostgreSQL met ces fichiers en forme. La barre à franchir est mesurée : `turf evaluate` dit ce que valent les cotes seules, et une application montre le programme, le marché et la santé de la collecte. Le modèle (étapes 2 et 3) vient au sprint 4.
+**Où en est-on.** L'étape 1 est écrite : le collecteur suit le programme du jour, stocke chaque réponse de la source telle quelle, et peut rapatrier cinq ans d'historique. Une base PostgreSQL met ces fichiers en forme. La barre à franchir est mesurée : `turf evaluate` dit ce que valent les cotes seules, et une application montre le programme, le marché et la santé de la collecte. Le modèle v1 et le protocole de décision sont écrits : `turf reglage` les compare au marché, `turf decide` rendra le verdict, une seule fois, quand les cinq ans d'historique seront chargés. Le journal de pronostics (étape 3) vient au sprint 6.
 
 ---
 
@@ -51,7 +51,7 @@ Le verdict (go/no-go) est rendu à la fin du sprint 4, sur 12 mois de courses qu
 | Base de données | PostgreSQL 17, SQLAlchemy, migrations Alembic | Oui |
 | Calcul et évaluation | NumPy, Polars, fichiers Parquet | Oui |
 | Interface | Streamlit | Oui |
-| Modèles | scikit-learn, LightGBM, statsmodels | Sprint 4 |
+| Modèles | Logit conditionnel (NumPy), LightGBM | Oui |
 
 ---
 
@@ -156,7 +156,23 @@ Ces commandes lisent la base (`TURF_BASE_URL`). Aucune n'interroge la source PMU
 .\.venv\Scripts\turf.exe app
 ```
 
-Le rapport écarte toujours les courses du 01/10/2025 au 30/09/2026 : c'est le test gelé, qui ne sera ouvert qu'une fois, au sprint 4. Comment lire le rapport : [docs/adr/0007](./docs/adr/0007-protocole-de-mesure-du-marche.md).
+Le rapport écarte toujours les courses du 01/10/2025 au 30/09/2026 : c'est le test gelé, qui ne sera ouvert qu'une fois. Comment lire le rapport : [docs/adr/0007](./docs/adr/0007-protocole-de-mesure-du-marche.md).
+
+### Modèle et décision
+
+À lancer sur le poste, à partir de l'export Parquet du VPS ([EXPLOITATION.md § 8.4](./docs/EXPLOITATION.md#84-régler-le-modèle-puis-décider)). Quelques minutes et jusqu'à 2 Go de mémoire sur cinq ans.
+
+```powershell
+# Compare les modèles au marché sur la période de réglage. Rejouable à volonté.
+# Écrit data\rapports\reglage-AAAA-MM-JJ.md et .json
+.\.venv\Scripts\turf.exe reglage --parquet data\parquet
+
+# Ouvre le test gelé, UNE seule fois : verdict du go/no-go.
+# Sans --ouvrir, la commande explique ce qu'elle va faire et s'arrête.
+.\.venv\Scripts\turf.exe decide --masse INTERNET --modele logit --parquet data\parquet
+```
+
+Protocole et critères : [docs/adr/0008](./docs/adr/0008-protocole-de-decision.md).
 
 ### Tests et qualité
 
@@ -248,13 +264,22 @@ ilomad-turf/
 │   │   ├── pilote.py             quels jours lire ; service d'ingestion en continu
 │   │   └── qualite.py            contrôles de cohérence
 │   ├── export.py                 la table des partants à plat ; lecture et écriture Parquet
+│   ├── features/
+│   │   ├── registre.py           liste blanche des champs connus avant la course
+│   │   ├── construction.py       variables point-in-time : forme, Elo, drivers…
+│   │   └── musique.py            lecture de la musique
 │   ├── modeles/
-│   │   └── marche.py             modèle 0 : la cote, avec ou sans correction du biais
+│   │   ├── marche.py             modèle 0 : la cote, avec ou sans correction du biais
+│   │   ├── logit_conditionnel.py le logit des courses, par la méthode de Newton
+│   │   ├── fondamental.py        les deux modèles sans cote : logit, LightGBM
+│   │   └── combinaison.py        modèle × cote (Benter), et calibration
 │   ├── evaluation/
 │   │   ├── periodes.py           entraînement, réglage, test gelé
 │   │   ├── echantillon.py        quelles courses sont évaluables, lesquelles sont écartées
 │   │   ├── metriques.py          log-perte, Brier, calibration, intervalle de confiance
-│   │   └── reference.py          le rapport de référence du marché
+│   │   ├── reference.py          le rapport de référence du marché
+│   │   ├── jeu.py                le jeu de modélisation
+│   │   └── decision.py           validation glissante, verdict, ouverture unique du test
 │   ├── services/                 ce que l'application affiche : programme, marché, santé
 │   └── app/                      pages Streamlit ; n'appellent que services/
 ├── tests/                        dont fixtures/raw : trois jours réels, anonymisés

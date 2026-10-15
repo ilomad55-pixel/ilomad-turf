@@ -11,6 +11,8 @@ turf parse                      charge dans la base ce que le collecteur a écri
 turf qualite                    contrôle la base
 turf export                     écrit les tables d'entraînement en Parquet
 turf evaluate                   mesure les cotes : rapport de référence du marché
+turf reglage                    compare les modèles au marché, sur la période de réglage
+turf decide                     ouvre le test gelé, une seule fois : rapport de go/no-go
 turf app                        lance l'application
 """
 
@@ -36,8 +38,9 @@ from turf.collecte.ressources import PROGRAMME, Demande
 from turf.collecte.stockage_brut import StockageBrut
 from turf.config import ConfigurationInvalide, Parametres
 from turf.db import session
-from turf.evaluation import echantillon, reference
-from turf.evaluation.periodes import REGLAGE
+from turf.evaluation import decision, echantillon, reference
+from turf.evaluation.jeu import preparer
+from turf.evaluation.periodes import REGLAGE, TEST_GELE
 from turf.horloge import PARIS, Horloge, jour_de_programme
 from turf.ingestion import qualite as controles
 from turf.ingestion.pilote import ServiceIngestion, ingerer
@@ -432,17 +435,7 @@ def evaluate(
     if perimetre not in echantillon.PERIMETRES:
         raise typer.BadParameter(f"périmètre attendu : {', '.join(echantillon.PERIMETRES)}")
     jour_de_coupure = _jour(coupure, horloge)
-    if parquet is not None:
-        try:
-            donnees = export.relire(parquet, colonnes=echantillon.COLONNES)
-        except FileNotFoundError as e:
-            typer.echo(f"Rien à lire : {e}.", err=True)
-            raise typer.Exit(1) from e
-    else:
-        with _moteur(parametres).connect() as connexion:
-            donnees = export.lire(
-                connexion, date(2000, 1, 1), date(2100, 1, 1), colonnes=echantillon.COLONNES
-            )
+    donnees = _partants(parametres, parquet, echantillon.COLONNES)
     rapport = reference.calculer(
         donnees,
         nom_perimetre=perimetre,
@@ -496,6 +489,213 @@ def application(
         "--browser.gatherUsageStats=false",
     ]
     streamlit.main()
+
+
+OptionParquet = Annotated[
+    Path | None,
+    typer.Option("--parquet", help="Lit les fichiers de ce dossier au lieu de la base."),
+]
+OptionSortie = Annotated[
+    Path | None,
+    typer.Option("--sortie", help="Dossier du rapport (défaut : <données>/rapports)."),
+]
+MASSES = ("INTERNET", "OFFLINE")
+
+
+def _partants(parametres: Parametres, parquet: Path | None, colonnes=None):
+    """La table des partants, depuis les fichiers Parquet ou depuis la base."""
+    if parquet is not None:
+        try:
+            return export.relire(parquet, colonnes=colonnes)
+        except FileNotFoundError as e:
+            typer.echo(f"Rien à lire : {e}.", err=True)
+            raise typer.Exit(1) from e
+    with _moteur(parametres).connect() as connexion:
+        return export.lire(connexion, date(2000, 1, 1), date(2100, 1, 1), colonnes=colonnes)
+
+
+def _periode(valeur: str, horloge: Horloge) -> tuple[date, date]:
+    debut, separateur, fin = valeur.partition(":")
+    if not separateur:
+        raise typer.BadParameter(
+            f"période attendue sous la forme AAAA-MM-JJ:AAAA-MM-JJ, reçu « {valeur} »"
+        )
+    return _jour(debut, horloge), _jour(fin, horloge)
+
+
+def _ecrire_rapport(dossier: Path, nom: str, texte: str, contenu: dict) -> Path:
+    dossier.mkdir(parents=True, exist_ok=True)
+    (dossier / f"{nom}.json").write_text(
+        json.dumps(contenu, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
+    chemin = dossier / f"{nom}.md"
+    chemin.write_text(texte, encoding="utf-8")
+    return chemin
+
+
+def _resumer(nom_modele: str, resultat: dict) -> None:
+    mesures, ecarts = resultat["mesures"], resultat["ecarts"]
+    ligne = (
+        f"{nom_modele:<11} {resultat['masse']:<8} {resultat['courses_evaluation']:>6} courses   "
+        f"cote de référence {mesures['marche_reference']['log_perte']:.3f}   "
+        f"cote finale {mesures['marche_finale']['log_perte']:.3f}   "
+        f"combiné {mesures['combine']['log_perte']:.3f}   "
+        f"gain sur réf. {ecarts['marche_reference']['ecart']:+.4f}"
+    )
+    typer.echo(ligne.replace(".", ","))
+
+
+@app.command()
+def reglage(
+    modeles: Annotated[
+        str, typer.Option("--modeles", help="Modèles comparés, séparés par des virgules.")
+    ] = ",".join(decision.fondamental.MODELES),
+    masses: Annotated[
+        str, typer.Option("--masses", help="Masses de paris, séparées par des virgules.")
+    ] = ",".join(MASSES),
+    calage: Annotated[
+        str, typer.Option("--calage", help="Période de calage de la combinaison, DEBUT:FIN.")
+    ] = "2024-10-01:2025-03-31",
+    evaluation: Annotated[
+        str, typer.Option("--evaluation", help="Période d'évaluation, DEBUT:FIN.")
+    ] = "2025-04-01:2025-09-30",
+    parquet: OptionParquet = None,
+    sortie: OptionSortie = None,
+) -> None:
+    """Compare les modèles au marché sur la période de réglage. Rejouable à volonté.
+
+    Même calcul que `turf decide`, sur des périodes qui ne touchent pas le test gelé.
+    """
+    parametres = _parametres()
+    horloge = Horloge()
+    periode_calage, periode_evaluation = _periode(calage, horloge), _periode(evaluation, horloge)
+    noms_modeles = [m.strip() for m in modeles.split(",") if m.strip()]
+    noms_masses = [m.strip().upper() for m in masses.split(",") if m.strip()]
+    if set(noms_modeles) - set(decision.fondamental.MODELES):
+        raise typer.BadParameter(f"modèles connus : {', '.join(decision.fondamental.MODELES)}")
+    if set(noms_masses) - set(MASSES):
+        raise typer.BadParameter(f"masses connues : {', '.join(MASSES)}")
+    try:
+        decision.verifier_hors_test(periode_calage, periode_evaluation)
+    except decision.PeriodeInvalide as e:
+        raise typer.BadParameter(str(e)) from e
+
+    # Le test gelé n'entre même pas en mémoire.
+    donnees = _partants(parametres, parquet)
+    donnees = donnees.filter(donnees["date_programme"] < TEST_GELE[0])
+    jeu = preparer(donnees)
+    sections, resultats = [], []
+    try:
+        for nom_modele in noms_modeles:
+            predit, explication = decision.predire(
+                jeu, nom_modele, periode_calage[0], periode_evaluation[1]
+            )
+            for masse in noms_masses:
+                resultat = decision.evaluer(predit, masse, periode_calage, periode_evaluation)
+                sections.append(decision.rediger_evaluation(nom_modele, resultat, explication))
+                resultats.append({"modele": nom_modele, **resultat, **explication})
+                _resumer(nom_modele, resultat)
+    except decision.PeriodeInvalide as e:
+        typer.echo(f"Évaluation impossible : {e}.", err=True)
+        raise typer.Exit(1) from e
+
+    texte = decision.rediger(
+        "Réglage : modèles contre marché",
+        [
+            f"Jeu : {len(jeu)} courses de trot en France, test gelé exclu. "
+            "Chiffres de réglage : ils servent à choisir, pas à conclure."
+        ],
+        sections,
+    )
+    chemin = _ecrire_rapport(
+        sortie or parametres.dossier_donnees / "rapports",
+        f"reglage-{jour_de_programme(horloge.maintenant())}",
+        texte,
+        {"version": __version__, "resultats": resultats},
+    )
+    typer.echo(f"Rapport : {chemin}")
+
+
+@app.command()
+def decide(
+    masse: Annotated[
+        str, typer.Option("--masse", help="Masse de la cote de référence : INTERNET ou OFFLINE.")
+    ],
+    modele: Annotated[str, typer.Option("--modele", help="Modèle fondamental retenu au réglage.")],
+    ouvrir: Annotated[
+        bool,
+        typer.Option("--ouvrir", help="Confirme l'ouverture du test gelé. Irréversible."),
+    ] = False,
+    parquet: OptionParquet = None,
+    sortie: OptionSortie = None,
+) -> None:
+    """Ouvre le test gelé, UNE fois : rapport de décision du go/no-go.
+
+    Calage sur toute la période de réglage, évaluation sur le test gelé. Un
+    marqueur est posé avant tout calcul : une seconde ouverture est refusée.
+    """
+    parametres = _parametres()
+    horloge = Horloge()
+    masse = masse.upper()
+    if masse not in MASSES:
+        raise typer.BadParameter(f"masses connues : {', '.join(MASSES)}")
+    if modele not in decision.fondamental.MODELES:
+        raise typer.BadParameter(f"modèles connus : {', '.join(decision.fondamental.MODELES)}")
+    marqueur = parametres.dossier_etat / decision.FICHIER_OUVERTURE
+    if marqueur.exists():
+        typer.echo(f"Le test gelé a déjà été ouvert ({marqueur}) :", err=True)
+        typer.echo(marqueur.read_text(encoding="utf-8"), err=True)
+        raise typer.Exit(1)
+    if not ouvrir:
+        typer.echo(
+            f"Cette commande ouvre le test gelé ({TEST_GELE[0]} → {TEST_GELE[1]}) avec le "
+            f"modèle « {modele} » et la masse {masse}. Elle ne peut être lancée qu'une fois, "
+            "et son verdict ne se refait pas.\n"
+            "Avant : `turf reglage` doit avoir désigné ce modèle et cette masse, et tourner "
+            "sans erreur sur les mêmes données.\n"
+            "Pour ouvrir : ajouter --ouvrir."
+        )
+        raise typer.Exit(1)
+
+    # Tout ce qui peut échouer sans regarder le test passe avant le marqueur.
+    jeu = preparer(_partants(parametres, parquet))
+    if not len(jeu.periode(*TEST_GELE)) or len(jeu.periode(*REGLAGE)) < decision.COURSES_MINIMUM:
+        typer.echo(
+            "Données insuffisantes : la reprise d'historique doit couvrir le réglage et le "
+            "test gelé. Le test n'a pas été ouvert.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    contexte = {
+        "ouvert_le": horloge.maintenant().isoformat(timespec="seconds"),
+        "version": __version__,
+        "masse": masse,
+        "modele": modele,
+        "calage": [REGLAGE[0].isoformat(), REGLAGE[1].isoformat()],
+        "evaluation": [TEST_GELE[0].isoformat(), TEST_GELE[1].isoformat()],
+    }
+    marqueur = decision.ouvrir_le_test_gele(parametres.dossier_etat, contexte)
+    typer.echo(f"Test gelé ouvert : marqueur {marqueur}")
+    predit, explication = decision.predire(jeu, modele, REGLAGE[0], TEST_GELE[1])
+    resultat = decision.evaluer(predit, masse, REGLAGE, TEST_GELE)
+    decision.consigner(marqueur, contexte, resultat)
+    texte = decision.rediger(
+        "Décision go/no-go",
+        [
+            f"Test gelé ouvert le {contexte['ouvert_le']}, une seule fois. Modèle « {modele} », "
+            f"masse {masse}.",
+        ],
+        [decision.rediger_evaluation(modele, resultat, explication)],
+    )
+    chemin = _ecrire_rapport(
+        sortie or parametres.dossier_donnees / "rapports",
+        "decision-go-no-go",
+        texte,
+        {**contexte, **resultat, **explication},
+    )
+    _resumer(modele, resultat)
+    typer.echo(resultat["verdict"]["conclusion"])
+    typer.echo(f"Rapport : {chemin}")
 
 
 def _moteur(parametres: Parametres):
